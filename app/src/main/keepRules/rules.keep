@@ -1,0 +1,27 @@
+# Add project specific R8 rules here.
+-keep class com.kiz9r.expense_tracker.data.** { *; }
+-keep class com.kiz9r.expense_tracker.domain.Observation { *; }
+-keep class com.kiz9r.expense_tracker.domain.** extends java.lang.Enum { *; }
+-keep class com.kiz9r.expense_tracker.ingestion.ParsedStatement { *; }
+-keep class com.kiz9r.expense_tracker.ingestion.ParsedRow { *; }
+-keep class com.kiz9r.expense_tracker.backup.BackupSnapshot { *; }
+-dontwarn java.awt.**
+-dontwarn javax.imageio.**
+# Optional JPEG2000 image decoder is not used by text-only statement extraction.
+-dontwarn com.gemalto.jp2.JP2Decoder
+# AGP will combine all keep rule files in src/main/keepRules to pass to R8
+#
+# For more details, see
+#   https://d.android.com/r/tools/r8/keep-rules
+
+# If your project uses WebView with JS, uncomment the following
+# and specify the fully qualified class name to the JavaScript interface
+# class:
+#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
+#   public *;
+#}
+-keep class com.kiz9r.expense_tracker.reconciliation.SavedReview { *; }
+-keep class com.kiz9r.expense_tracker.reconciliation.SavedResolution { *; }
+# Preview fingerprints must include stable candidate/decision fields in optimized builds.
+-keep class com.kiz9r.expense_tracker.domain.MatchCandidate { *; }
+-keep class com.kiz9r.expense_tracker.domain.MatchDecision$* { *; }
