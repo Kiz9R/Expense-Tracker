@@ -96,11 +96,14 @@ class BackgroundImportTest {
             "Statement Period: 01-09-2026 to 30-09-2026\nOpening Balance: 10000.00\n"+
             "Date Value Date Narration Debit Credit Balance\n"+
             "09-09-2026 09-09-2026 UPI/600000000001/SHOP 10.00 0.00 9990.00\nClosing Balance: 9990.00"
-        val id=jobs.enqueue("synthetic-job","synthetic-job-hash",text)
+        val ledger=dependencies(context).ledger()
+        val account=com.kiz9r.expense_tracker.data.AccountEntity(nickname="Synthetic worker",last4="4821")
+        ledger.db.ledger().saveAccount(account)
+        val id=jobs.enqueue(account.id,"synthetic-job-hash",text)
         try {
             val (job,statement)=kotlinx.coroutines.withTimeout(30000){jobs.await(id)}
             assertEquals("READY",job.status);assertEquals("",job.text)
             assertEquals("4821",statement.last4);assertEquals(1,statement.rows.size)
-        } finally {jobs.discard(id)}
+        } finally {jobs.discard(id);ledger.deleteAccount(account.id)}
     }
 }

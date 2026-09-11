@@ -16,6 +16,8 @@ Current implementation gaps, experimental support and pending validation are tra
 - Keystore-wrapped SQLCipher key, optional biometric/device-credential lock and screenshot protection.
 - Portable password-encrypted backup, validation preview and transactional replacement restore.
 
+To remove an account, open **Settings → Manage SBI accounts → Delete**, then confirm the named account. This permanently deletes its local transactions, linked evidence, statements and pending imports, including verified and hidden records. Export an encrypted backup first if you need recovery. Other accounts, shared categories/tags/rules and unassigned observations remain. Existing backups are unchanged; your actual SBI bank account is unaffected. Deleting the final account returns to onboarding.
+
 ## Setup and builds
 
 Open this directory in Android Studio. Install Android SDK platform 37, accept the SDK licenses, and configure local.properties with your SDK path. The existing project uses Gradle 9.6.0, AGP 9.4.0 and a Java 25 Gradle daemon; Android source compatibility remains Java 11. Minimum device version is Android 11 (API 30).

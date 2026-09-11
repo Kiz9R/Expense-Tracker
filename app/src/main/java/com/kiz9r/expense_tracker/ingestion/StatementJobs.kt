@@ -20,7 +20,10 @@ class StatementJobs @Inject constructor(@param:ApplicationContext private val co
     val jobs get()=db.ledger().jobs()
     suspend fun enqueue(accountId: String, fileHash: String, text: String, fileName: String = "SBI statement.pdf"): String {
         val job=ImportJobEntity(accountId=accountId,fileHash=fileHash,fileName=maskAccounts(fileName.take(160)),text=maskAccounts(text))
-        db.withTransaction {db.ledger().saveJob(job)}
+        db.withTransaction {
+            require(db.ledger().allAccounts().any { it.id == accountId }) { "Account no longer exists." }
+            db.ledger().saveJob(job)
+        }
         schedule(job.id)
         return job.id
     }

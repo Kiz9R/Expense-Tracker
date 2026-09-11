@@ -32,7 +32,7 @@ import com.kiz9r.expense_tracker.domain.*
     }
     Screen("settings") {
         Heading("Settings","Private by default. Your financial data is stored in an encrypted database on this device.")
-        OutlinedButton(onClick={navigate("accounts")}){Text("Manage SBI accounts")}
+        OutlinedButton(onClick={navigate("accounts")},modifier=Modifier.testTag("settings.accounts")){Text("Manage SBI accounts")}
         OutlinedButton(onClick={navigate("review")}){Text("Needs review ("+reviews.size+")")}
         OutlinedButton(onClick={navigate("mandates")}){Text("Mandates")}
         OutlinedButton(onClick={navigate("rules")}){Text("Merchant rules")}

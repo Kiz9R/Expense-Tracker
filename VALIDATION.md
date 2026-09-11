@@ -86,3 +86,29 @@ The full Android instrumentation suite ran through adb on the disposable Android
 The Relationship Summary layout prerequisite is satisfied. The generic text-table adapter remains experimental, scanned PDFs/CSV/XLSX remain unsupported, and documents with multiple account blocks require separate per-account statements. Official arithmetic discrepancies remain exceptions and cannot be dismissed as reconciled.
 
 Physical-phone SAF behavior, process-death/reboot/OEM restrictions, Android 11, accessibility, biometric lifecycle, real SMS/notification coverage, uninstall/reinstall recovery and signed phone updates remain pending as tracked in leftout.md. This run does not claim those checks or a new release-APK cold launch. The earlier release cold-launch evidence refers to the 10 September artifact.
+
+## 11 September 2026 — Account deletion
+
+Implemented Settings → Manage SBI accounts → Delete with explicit confirmation identifying the nickname and masked account. Account-owned transactions (including hidden and verified entries), metadata/tag links, linked observations/evidence, statement imports/rows/decisions, mandates, refund links and queued imports are removed atomically. Other accounts, shared categories/tags/rules/settings and unassigned observations remain. No schema migration is required.
+
+Verification:
+
+- 21 JVM tests passed (14 FinanceTest, 7 RelationshipParserTest).
+- Final Android runner: **OK (39 tests)** in 32.240 seconds on the disposable Android 17 emulator. This comprises **38 executed passes and one skipped opt-in ProvidedStatementValidationTest**; the private statement/password were not supplied or reread for this change.
+- New account tests cover colliding suffix isolation, removal of verified/hidden records and ignored-row decision revisions, retention of shared/unassigned records, final-account deletion, stale-job/preview rejection, SQL-abort rollback, and Compose cancellation/confirmation.
+- Existing reconciliation, encrypted migration, manual UI, protected-PDF and WorkManager tests passed. The WorkManager test now creates a real synthetic account instead of using a nonexistent account ID.
+- Unit tests, debug/test installation, lint and release assembly succeeded. Lint: zero errors, 16 warnings.
+- APK signature verified with the existing signer (v2). No physical phone, signed APK cold launch or phone update test was performed.
+- Documentation check: one root featureDevelopmentInfo.md; no broken local documentation paths.
+
+Commands:
+
+    .\gradlew.bat :app:testDebugUnitTest :app:installDebug :app:installDebugAndroidTest :app:lintDebug :app:assembleRelease --offline
+    .\gradlew.bat :app:installDebugAndroidTest :app:lintDebug --offline
+    adb -s emulator-5554 shell am instrument -w com.kiz9r.expense_tracker.test/androidx.test.runner.AndroidJUnitRunner
+
+Evidence: [main build](build/account-deletion-build.txt), [corrected test build](build/account-deletion-test-build.txt), [final Android results](build/account-deletion-device-final.txt). The initial test compilation missed two nullable arguments, subsequently fixed. A disconnected emulator was restarted. The [first completed Android run](build/account-deletion-device.txt) exposed the outdated nonexistent-account WorkManager fixture; the final run passed after its correction.
+
+Rebuilt artifact: [app-release.apk](app/build/outputs/apk/release/app-release.apk), version 1.1 / code 2, 17,945,969 bytes. SHA-256: **6E1A58361A6307BFC5BAF97134812EBA5A4D50D56084B4A8908D2A372DB2F16D**. This supersedes the earlier PDF-build hash for the current artifact.
+
+Physical-phone confirmation, accessibility/large fonts, final-account onboarding and lifecycle QA remain pending. Deletion affects local records only; exported backups and the actual SBI account are unchanged.

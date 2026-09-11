@@ -10,6 +10,17 @@ const val ITEM_QUERY = """SELECT t.*, COALESCE(NULLIF(m.merchantDisplay, ''), t.
     LEFT JOIN metadata m ON m.transactionId=t.id LEFT JOIN categories c ON c.id=m.categoryId """
 @Dao
 interface LedgerDao {
+    @Query("DELETE FROM review_decisions WHERE transactionId IN (SELECT id FROM transactions WHERE accountId=:accountId) OR observationKey IN (SELECT identity FROM events WHERE id IN (SELECT eventId FROM evidence WHERE transactionId IN (SELECT id FROM transactions WHERE accountId=:accountId) UNION SELECT eventId FROM mandates WHERE accountId=:accountId)) OR EXISTS (SELECT 1 FROM statement_imports s WHERE s.accountId=:accountId AND substr(observationKey,1,length('statement:' || s.logicalFingerprint || ':'))='statement:' || s.logicalFingerprint || ':')")
+    suspend fun deleteAccountDecisions(accountId: String)
+    @Query("DELETE FROM events WHERE id IN (SELECT eventId FROM evidence WHERE transactionId IN (SELECT id FROM transactions WHERE accountId=:accountId) UNION SELECT eventId FROM mandates WHERE accountId=:accountId) AND NOT EXISTS (SELECT 1 FROM mandates m WHERE m.eventId=events.id AND (m.accountId IS NULL OR m.accountId!=:accountId)) AND NOT EXISTS (SELECT 1 FROM evidence e JOIN transactions t ON t.id=e.transactionId WHERE e.eventId=events.id AND t.accountId!=:accountId)")
+    suspend fun deleteAccountEvents(accountId: String)
+    @Query("DELETE FROM refund_links WHERE originalId IN (SELECT id FROM transactions WHERE accountId=:accountId) OR refundId IN (SELECT id FROM transactions WHERE accountId=:accountId)")
+    suspend fun deleteAccountRefunds(accountId: String)
+    @Query("DELETE FROM mandates WHERE accountId=:accountId") suspend fun deleteAccountMandates(accountId: String)
+    @Query("DELETE FROM statement_imports WHERE accountId=:accountId") suspend fun deleteAccountImports(accountId: String)
+    @Query("DELETE FROM import_jobs WHERE accountId=:accountId") suspend fun deleteAccountJobs(accountId: String)
+    @Query("DELETE FROM transactions WHERE accountId=:accountId") suspend fun deleteAccountTransactions(accountId: String)
+    @Query("DELETE FROM accounts WHERE id=:accountId") suspend fun deleteAccount(accountId: String): Int
     @Upsert suspend fun saveJob(job: ImportJobEntity)
     @Query("SELECT * FROM import_jobs WHERE id=:id") suspend fun job(id: String): ImportJobEntity?
     @Query("SELECT * FROM import_jobs WHERE id=:id") fun observeJob(id: String): Flow<ImportJobEntity?>

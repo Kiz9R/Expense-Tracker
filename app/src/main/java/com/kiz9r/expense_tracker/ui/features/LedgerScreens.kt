@@ -1,6 +1,8 @@
 package com.kiz9r.expense_tracker.ui.features
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,10 +21,29 @@ import kotlinx.coroutines.flow.flowOf
     var type by rememberSaveable { mutableStateOf("Savings") }
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    var deleteId by rememberSaveable { mutableStateOf<String?>(null) }
+    val deleting = accounts.firstOrNull { it.id == deleteId }
+    if(deleting != null) AlertDialog(
+        modifier=Modifier.testTag("accounts.modals.delete"),
+        onDismissRequest={ if(!busy) deleteId=null },
+        title={Text("Delete " + deleting.nickname + "?")},
+        text={Text("Permanently remove SBI ••••" + deleting.last4 + " and all its local transactions (including verified and hidden entries), notes, tag links, linked evidence, statements, review decisions, mandates and pending imports.\n\nOther accounts, shared categories, tags, rules and unassigned observations stay. This does not close your SBI bank account.\n\nThis cannot be undone in the app. Export an encrypted backup first if needed; existing backup files are not changed.",modifier=Modifier.verticalScroll(rememberScrollState()))},
+        confirmButton={TextButton(enabled=!busy,onClick={vm.deleteAccount(deleting.id){deleteId=null}},
+            modifier=Modifier.testTag("accounts.modals.delete.confirm")){Text("Delete account",color=MaterialTheme.colorScheme.error)}},
+        dismissButton={TextButton(enabled=!busy,onClick={deleteId=null},
+            modifier=Modifier.testTag("accounts.modals.delete.cancel")){Text("Cancel")}}
+    )
     Screen("accounts") {
         Heading(if(onboarding) "A clearer view of your money" else "Your SBI accounts",
             "Your expense data stays on this device. No login, no bank password, no payments.")
-        if(!onboarding) accounts.forEach { Text(it.nickname+" · SBI ••••"+it.last4+" · "+it.accountType) }
+        if(!onboarding) accounts.forEach { account ->
+            Row(Modifier.fillMaxWidth().testTag("accounts.items."+account.id),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text(account.nickname+" · SBI ••••"+account.last4+" · "+account.accountType,Modifier.weight(1f))
+                TextButton(enabled=!busy,onClick={deleteId=account.id},modifier=Modifier.testTag("accounts.items."+account.id+".delete")) {
+                    Text("Delete",color=MaterialTheme.colorScheme.error)
+                }
+            }
+        }
         Field(name,{name=it},"Account nickname","accounts.form.nickname")
         Field(digits,{digits=it.take(4)},"Last four account digits","accounts.form.last-four",numeric=true)
         Choice("Account type",type,listOf("Savings" to "Savings","Current" to "Current"),"accounts.form.type"){type=it}

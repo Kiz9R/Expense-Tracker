@@ -58,7 +58,14 @@ class TrackerViewModel @Inject constructor(
         accountState.value=ledger.accounts.first()
         ready.value=true
         if(accountObserver==null) accountObserver=viewModelScope.launch {
-            ledger.accounts.collect {accountState.value=it}
+            ledger.accounts.collect { accounts ->
+                accountState.value=accounts
+                if(filter.value.accountId != null && accounts.none { it.id == filter.value.accountId })
+                    filter.value=filter.value.copy(accountId=null,page=0)
+                if(preview.value?.accountId?.let { id -> accounts.none { it.id == id } } == true) {
+                    activeImportJob=null; preview.value=null; resolutions.value=emptyMap()
+                }
+            }
         }
         reconciliation.processPending()
     }
@@ -78,6 +85,10 @@ class TrackerViewModel @Inject constructor(
         }
     }
     fun save(input: ManualInput, done: (String) -> Unit) = action { done(saveManual(input)) }
+    fun deleteAccount(id: String, done: () -> Unit) = action("Account and its local records deleted.") {
+        ledger.deleteAccount(id)
+        done()
+    }
     fun importPdf(uri: Uri, password: CharArray, accountId: String) {
         if(busy.value) { password.fill('\u0000'); return }
         action {

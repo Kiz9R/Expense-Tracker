@@ -39,6 +39,19 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
         require(last4.matches(Regex("\\d{4}"))) { "Enter exactly four account digits." }
         dao.saveAccount(AccountEntity(nickname = nickname.trim(), last4 = last4, accountType = type))
     }
+    /** Explicit whole-account erasure, separate from the restrictions on individual bank entries. */
+    suspend fun deleteAccount(accountId: String) = db.withTransaction {
+        require(dao.allAccounts().any { it.id == accountId }) { "Account no longer exists." }
+        // Remove ownership-dependent records before their lookup paths disappear.
+        dao.deleteAccountDecisions(accountId)
+        dao.deleteAccountEvents(accountId)
+        dao.deleteAccountRefunds(accountId)
+        dao.deleteAccountMandates(accountId)
+        dao.deleteAccountImports(accountId)
+        dao.deleteAccountJobs(accountId)
+        dao.deleteAccountTransactions(accountId)
+        check(dao.deleteAccount(accountId) == 1)
+    }
     fun history(f: HistoryFilter): Flow<List<TransactionItem>> {
         val query = if (f.query.isBlank()) "" else "%" + (runCatching { Money.parse(f.query).toString() }.getOrNull()
             ?: f.query.trim()).replace("\\","\\\\").replace("%","\\%").replace("_","\\_") + "%"
