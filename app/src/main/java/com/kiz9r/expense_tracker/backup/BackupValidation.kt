@@ -4,6 +4,10 @@ import com.kiz9r.expense_tracker.domain.*
 import java.time.LocalDate
 
 fun validateBackup(s: BackupSnapshot) {
+    try { validateContents(s) }
+    catch(e: Exception) { throw IllegalArgumentException("Backup records are inconsistent or unsupported. Existing data was not changed.",e) }
+}
+private fun validateContents(s: BackupSnapshot) {
     require(s.version in 1..2) { "Unsupported backup version." }
     fun unique(values: List<String>) { require(values.none { it.isBlank() } && values.distinct().size==values.size) { "Duplicate or missing record identities." } }
     unique(s.accounts.map { it.id }); unique(s.categories.map { it.id }); unique(s.categories.map { it.name })
@@ -46,6 +50,7 @@ fun validateBackup(s: BackupSnapshot) {
     }
     require(s.reviewDecisions.all { it.action in listOf("new","match","ignore") &&
         (it.transactionId==null || it.transactionId in transactions) }) { "Invalid review decision target." }
+    val rowsByImport=s.statementRows.groupBy {it.importId}
     s.statementImports.forEach { imported ->
         val from=LocalDate.parse(imported.startDate)
         val until=LocalDate.parse(imported.endDate)
@@ -56,7 +61,7 @@ fun validateBackup(s: BackupSnapshot) {
                 "Invalid reconciliation warnings."
             }
         }
-        val rows = s.statementRows.filter { it.importId==imported.id }
+        val rows = rowsByImport[imported.id].orEmpty()
         require(rows.size==imported.transactionCount && rows.map { it.sequence }.sorted()==rows.indices.toList())
         rows.forEach { row ->
             val date=LocalDate.parse(row.date)
@@ -69,5 +74,6 @@ fun validateBackup(s: BackupSnapshot) {
             }
         }
     }
+    validateBackupRelations(s)
     require(s.events.none { Regex("(?i)\\bOTP\\b|one.time.password|verification code").containsMatchIn(it.content) })
 }

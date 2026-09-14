@@ -192,3 +192,37 @@ Evidence: [final build](build/sms-xml-delivery-build.txt), [final Android run](b
 Artifact: [app-release.apk](app/build/outputs/apk/release/app-release.apk), **version 1.2.1 / code 4**, **17,978,833 bytes**. SHA-256: **974C0AD40A95023F0D786C0EB2BC52255FCE9F09782DB242037F856E5E5C502E**. APK v2 signature verified with the existing personal signer, certificate SHA-256 **CAE7C0C84FB2D31A72FD32C8376294BBB77107DE173FC8B67E21B07B0C4EE152**. No signing material changed.
 
 Remaining: observed layouts are validated against this sample, not every SBI format. Other ATM, fee, refund/reversal and notification formats need source fixtures. Carrier delivery, phone installer/permission changes, first-unlock/reboot/OEM/force-stop/app-lock behavior, accessibility and signed phone-update QA remain pending. No physical-phone or historical-ledger-import claim is made.
+
+## 14 September 2026 — Backup and recovery completion (version 1.3)
+
+Implemented database-independent archive authentication and strict field/type decoding, financial/evidence/statement/decision/mandate/rule/settings validation, onboarding restore, invalidated/cancelled preview handling, and startup recovery when the encrypted ledger cannot open. Key-loss recovery requires a validated backup and explicit confirmation, restores into a separate encrypted database, reopens it successfully and then activates it; original inaccessible files remain untouched. Users close/reopen after activation. Normal restore remains a single Room transaction. SMS and notification opt-in checks occur inside their observation-write transactions so stale callbacks cannot bypass settings disabled by restore. Existing ETBACK01 encryption and archive versions 1/2 remain supported; Room schema stays at version 2.
+
+Final executed checks on the disposable Android 17 emulator:
+
+- **47 JVM passes, one opt-in XML skip (48 reported)**. Three new BackupArchiveTest cases cover legacy/current archives, absent and incorrectly typed fields, integer overflow/fractional versions, random salts/nonces and truncated envelopes. Existing finance, PDF layout and SMS unit tests pass.
+- **Android runner OK (65 tests), 60.267 seconds**: **62 executed passes and three opt-in skips** (private PDF, externally injected SMS and the separately orchestrated reinstall fixture). Nine BackupRecoveryTest cases cover every persistent record family, password/tamper/malformed-file rejection, failed output/password clearing, inconsistent relationships and review targets, SQL write-failure rollback retaining drafts, cancellation both while queued and after deletion begins, and concurrent enabled SMS/notification intake. Existing reconciliation, migration, UI and SMS regressions pass.
+- **BackupUiTest passes**: a fresh empty ledger exposes restore without account creation; an authenticated file preview makes no changes, cancelling confirmation makes no changes, and explicit confirmation restores the records. The SAF activity result is supplied by an instrumentation monitor; real phone/provider interaction remains separate QA.
+- **DeviceKeyRecoveryTest passes** with isolated preferences and database paths: removing wrapped key material prevents opening, invalid backup input leaves the original active, valid recovery activates a separately encrypted/reopenable ledger, the original ciphertext hash remains unchanged, and recovery refuses to replace a healthy ledger through that path.
+- **Actual emulator uninstall/reinstall proof passes**, using the opt-in BackupReinstallTest in prepare/verify phases. The host retained only encrypted invented-data archives and comparison hashes; the application was uninstalled and reinstalled. The new SQLCipher database-key fingerprint differed, the complete record digest matched, and SMS/notifications remained disabled. Prepare and verify each report OK (1 test); verify completed in 2.474 seconds. This adds one distinct passing Android test beyond the default suite.
+- Final build, debug/test installation, unit tests, lint and release assembly pass. **Lint: zero errors, 16 existing warnings.** Durable preference activation explicitly checks commit success rather than using a helper that discards that result. Build completed in 2m 57s.
+- The exact signed release installed and cold-launched successfully on the emulator; its UI exposed **Restore an encrypted backup** on onboarding. Cold launch: 1,388 ms. No real account, SMS XML or PDF was imported or used in this work.
+
+Final build command:
+
+    .\gradlew.bat :app:testDebugUnitTest :app:installDebug :app:installDebugAndroidTest :app:lintDebug :app:assembleRelease --offline
+
+Default Android command:
+
+    adb -s emulator-5554 shell am instrument -w com.kiz9r.expense_tracker.test/androidx.test.runner.AndroidJUnitRunner
+
+Reinstall proof (destructive only to the explicitly acknowledged disposable emulator's synthetic app installation; the script rejects physical-device serials):
+
+    python app/src/androidTest/backup-reinstall-fixture.py --adb <absolute-adb-path> --serial emulator-5554 --confirm-disposable
+
+Evidence: [final build](build/backup-notification-final-build.txt), [final Android suite](build/backup-notification-final-device.txt), [reinstall result](build/backup-reinstall-run.txt), [prepare](build/backup-reinstall-proof/prepare.txt), [verify](build/backup-reinstall-proof/verify.txt), [signed cold launch](build/backup-release-launch.txt), [signature](build/backup-signature.txt), [unit reports](app/build/reports/tests/testDebugUnitTest), [lint](app/build/reports/lint-results-debug.html).
+
+Development checks initially found fixture issues: legacy-version digests were compared across different versions, a test returned Boolean instead of Unit, and the SAF monitor lacked a MIME type. The corrected fixture intercepts the intended picker result and waits for the returning Compose hierarchy. These failed attempts remain in [development suite](build/backup-development-device.txt) and [initial UI run](build/backup-ui-device.txt). No app confirmation or validation guard was relaxed to pass the tests.
+
+Artifact: [app-release.apk](app/build/outputs/apk/release/app-release.apk), **version 1.3 / code 5**, **17,995,217 bytes**. SHA-256: **D0DD3A0256AF475A693BF6DE3F4BBEA8E2214C24AC74803FDB40208D4A3E9F34**. APK v2 signature verified with the retained personal signer, certificate SHA-256 **CAE7C0C84FB2D31A72FD32C8376294BBB77107DE173FC8B67E21B07B0C4EE152**. Signing material is unchanged and is not part of the financial archive.
+
+Remaining: physical-phone reinstall/phone-change recovery, real SAF provider interruptions, hardware Keystore/app-lock lifecycle, Android 11 and accessibility checks. Large archives remain bounded to 64 MB but are processed in memory; multi-year memory/performance profiling remains open. A failed SAF output may leave an incomplete destination, which the UI tells the user to remove/retry. No physical-phone recovery or hardware key-invalidation claim is made.

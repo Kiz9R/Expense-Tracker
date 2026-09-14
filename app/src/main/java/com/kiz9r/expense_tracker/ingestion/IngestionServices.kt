@@ -86,9 +86,7 @@ class UpiNotificationService : NotificationListenerService() {
         scope.launch {
             runCatching {
                 val graph = dependencies(this@UpiNotificationService)
-                if(graph.ledger().enabled("notifications")) {
-                    graph.reconciliation().enqueue(observation); scheduleIngestion(this@UpiNotificationService)
-                }
+                if(graph.reconciliation().enqueueNotification(observation)) scheduleIngestion(this@UpiNotificationService)
             }
         }
     }

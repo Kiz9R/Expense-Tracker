@@ -25,6 +25,12 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
     suspend fun enqueue(observation: Observation) = db.withTransaction {
         if (observation.kind != EventKind.IGNORE) dao.insertEvent(ledger.raw(observation))
     }
+    suspend fun enqueueNotification(observation: Observation): Boolean = db.withTransaction {
+        require(observation.source in listOf(Source.PHONEPE_NOTIFICATION,Source.GPAY_NOTIFICATION))
+        if(dao.setting("notifications")!="true" || observation.kind==EventKind.IGNORE) return@withTransaction false
+        dao.insertEvent(ledger.raw(observation))
+        true
+    }
     suspend fun processPending() {
         while (true) {
             val batch = dao.pendingEvents()

@@ -87,7 +87,15 @@ SMS and notification formats differ across providers/releases. Included parsers 
 
 Version-2 .etbackup snapshots (with version-1 restore compatibility) use AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations), with fresh salt/nonce and a minimum 12-character password. They are portable across installations and independent of Keystore keys.
 
-Restore authenticates the file and validates its version, identities, money/dates and record relationships before showing a preview. Replacement requires confirmation and executes in a Room transaction; failure preserves existing data. Re-enable SMS/notifications afterward. Backups are limited to 64 MB. Automatic Android cloud and device-transfer backup are disabled/excluded.
+To create a backup, open **Settings → Encrypted backup & restore**, enter and confirm a password of at least 12 characters, and save the .etbackup file outside the app's private storage. Keep its password separately. Validate the saved file before relying on it for recovery.
+
+On a fresh installation, choose **Restore an encrypted backup** from account setup. You can also restore from Settings. Select the file, enter its password and choose **Unlock & validate backup**. Check its date, masked accounts and record counts, then confirm replacement. The complete archive is authenticated and validated before any replacement; interrupted or failed database writes roll back. Re-enable SMS/notification tracking afterward and review app-lock settings.
+
+If the device's encryption keys are unavailable or the ledger cannot open, a recovery screen appears. Choose a valid encrypted backup, review it and confirm recovery. The app builds a new encrypted ledger and retains the inaccessible original files. After success, close and reopen the app. Without a backup and its password, the app cannot decrypt records whose device key is lost. There is no automatic reset.
+
+Version 1.3 has passed all-record backup/restore, failure/cancellation rollback, isolated missing-key recovery, and an actual Android 17 emulator uninstall/reinstall test with a new database key. Physical-phone and file-provider checks remain pending.
+
+Backups are limited to 64 MB and remain in memory during processing. If export fails, remove the incomplete destination and retry. Automatic Android cloud and device-transfer backup are disabled/excluded. APK signing keys are separate from financial backups.
 
 ## Architecture and maintenance
 

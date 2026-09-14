@@ -10,6 +10,7 @@ import javax.crypto.spec.SecretKeySpec
 
 /** Portable authenticated envelope. No device-bound key is needed to restore this file. */
 object BackupCrypto {
+    const val MAX_BYTES = 64*1024*1024
     private val magic = "ETBACK01".toByteArray(Charsets.US_ASCII)
     private const val iterations = 600_000
     private const val headerSize = 8+4+16+12
@@ -19,6 +20,7 @@ object BackupCrypto {
         finally { spec.clearPassword() }
     }
     fun encrypt(plain: ByteArray, password: CharArray): ByteArray {
+        require(plain.size<=MAX_BYTES-headerSize-16) { "Backup exceeds 64 MB." }
         require(password.size >= 12) { "Use a backup password of at least 12 characters." }
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val nonce = ByteArray(12).also { SecureRandom().nextBytes(it) }
@@ -29,7 +31,7 @@ object BackupCrypto {
         return header + cipher.doFinal(plain)
     }
     fun decrypt(bytes: ByteArray, password: CharArray): ByteArray {
-        require(bytes.size in (headerSize+16)..(64*1024*1024)) { "Invalid backup size." }
+        require(bytes.size in (headerSize+16)..MAX_BYTES) { "Invalid backup size." }
         val buffer = ByteBuffer.wrap(bytes)
         val prefix = ByteArray(8).also { buffer.get(it) }
         require(prefix.contentEquals(magic) && buffer.int==iterations) { "Unsupported backup format." }

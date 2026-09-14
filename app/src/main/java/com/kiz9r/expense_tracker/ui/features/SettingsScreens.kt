@@ -167,8 +167,8 @@ import com.kiz9r.expense_tracker.domain.*
         exportPassword=null
         if(uri!=null && secret!=null) vm.export(uri,secret) else secret?.fill('\u0000')
     }
-    val importer=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){restoreUri=it}
-    DisposableEffect(Unit) {onDispose {exportPassword?.fill('\u0000')}}
+    val importer=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){vm.clearBackupPreview();confirmRestore=false;restoreUri=it}
+    DisposableEffect(Unit) {onDispose {exportPassword?.fill('\u0000');vm.clearBackupPreview()}}
     Screen("backup") {
         Heading("Encrypted backup","Keep the password separately. The app cannot recover a forgotten backup password.")
         Field(password,{password=it},"Backup password (12+ characters)","backup.password",password=true)
@@ -182,7 +182,7 @@ import com.kiz9r.expense_tracker.domain.*
         },enabled=!busy,modifier=Modifier.testTag("backup.export")){Text("Export encrypted backup")}
         HorizontalDivider()
         Heading("Restore a backup")
-        OutlinedButton(onClick={importer.launch(arrayOf("*/*"))},enabled=!busy){Text("Select backup file")}
+        OutlinedButton(onClick={vm.clearBackupPreview();importer.launch(arrayOf("*/*"))},enabled=!busy,modifier=Modifier.testTag("backup.select")){Text("Select backup file")}
         if(restoreUri!=null) Button(onClick={
             val secret=password.toCharArray();password="";confirmation=""
             vm.inspectBackup(requireNotNull(restoreUri),secret)
@@ -191,8 +191,10 @@ import com.kiz9r.expense_tracker.domain.*
             Notice("Backup created "+Dates.date(snapshot.createdAt)+"\n"+
                 snapshot.accounts.size+" accounts · "+snapshot.transactions.size+" transactions · "+
                 snapshot.statementImports.size+" statement imports.\nRestoring replaces this device's current ledger.")
+            snapshot.accounts.forEach { Text(it.nickname+" · SBI ••••"+it.last4) }
+            Text(snapshot.evidence.size.toString()+" evidence records · "+snapshot.reviewDecisions.size+" review decisions · "+snapshot.mandates.size+" mandates")
             Button(onClick={confirmRestore=true},enabled=!busy,modifier=Modifier.testTag("backup.restore")){Text("Review replacement")}
-            TextButton(onClick={vm.restorePreview.value=null;restoreUri=null}){Text("Cancel restore")}
+            TextButton(onClick={vm.clearBackupPreview();restoreUri=null}){Text("Cancel restore")}
         }
     }
     if(confirmRestore) Confirm("Replace this device's ledger?","All current tracking data will be replaced by the validated backup. Export your current ledger first if you need it.",

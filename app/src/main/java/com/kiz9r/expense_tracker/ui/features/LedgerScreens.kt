@@ -16,6 +16,11 @@ import java.time.LocalTime
 import kotlinx.coroutines.flow.flowOf
 
 @Composable fun AccountScreen(vm: TrackerViewModel, onboarding: Boolean, done: ()->Unit) {
+    var restoring by rememberSaveable { mutableStateOf(false) }
+    if(onboarding && restoring) {
+        Column { TextButton(onClick={restoring=false;vm.clearBackupPreview()}){Text("Back to account setup")}; BackupScreen(vm) }
+        return
+    }
     var name by rememberSaveable { mutableStateOf("") }
     var digits by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf("Savings") }
@@ -44,6 +49,7 @@ import kotlinx.coroutines.flow.flowOf
                 }
             }
         }
+        if(onboarding) OutlinedButton(onClick={restoring=true},modifier=Modifier.testTag("accounts.restore")) { Text("Restore an encrypted backup") }
         Field(name,{name=it},"Account nickname","accounts.form.nickname")
         Field(digits,{digits=it.take(4)},"Last four account digits","accounts.form.last-four",numeric=true)
         Choice("Account type",type,listOf("Savings" to "Savings","Current" to "Current"),"accounts.form.type"){type=it}

@@ -7,6 +7,8 @@ import com.google.gson.Gson
 import com.kiz9r.expense_tracker.data.LedgerDatabase
 import com.kiz9r.expense_tracker.ingestion.readBytesLimited
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -41,23 +43,20 @@ class BackupService @Inject constructor(@ApplicationContext private val context:
             try {
                 val encrypted = BackupCrypto.encrypt(plain,password)
                 require(encrypted.size<=64*1024*1024) { "Backup exceeds 64 MB." }
-                requireNotNull(context.contentResolver.openOutputStream(uri,"wt")).use { it.write(encrypted) }
+                currentCoroutineContext().ensureActive()
+                try { requireNotNull(context.contentResolver.openOutputStream(uri,"wt")).use { it.write(encrypted) } }
+                catch(e: java.io.IOException) {
+                    throw java.io.IOException("Backup could not be saved completely. Remove the incomplete output file and export again.",e)
+                }
             } finally { plain.fill(0) }
         } finally { password.fill('\u0000') }
     }
-    suspend fun inspect(uri: Uri, password: CharArray): BackupSnapshot = withContext(Dispatchers.IO) {
-        try {
-            val encrypted = requireNotNull(context.contentResolver.openInputStream(uri)).use { it.readBytesLimited(64*1024*1024) }
-            val plain = BackupCrypto.decrypt(encrypted,password)
-            try {
-                gson.fromJson(plain.toString(Charsets.UTF_8),BackupSnapshot::class.java).also(::validateBackup)
-            } finally { plain.fill(0) }
-        } finally { password.fill('\u0000') }
-    }
+    suspend fun inspect(uri: Uri, password: CharArray): BackupSnapshot = BackupArchive.inspect(context,uri,password,gson)
     suspend fun restore(snapshot: BackupSnapshot) = withContext(Dispatchers.IO) {
         validateBackup(snapshot)
         // Room serializes this replacement with every ingestion and editing transaction.
         db.withTransaction {
+            currentCoroutineContext().ensureActive()
             val dao = db.backup()
             db.ledger().clearJobs()
             dao.clearSettingEntity()
@@ -90,6 +89,7 @@ class BackupService @Inject constructor(@ApplicationContext private val context:
             dao.insertMandateEntity(snapshot.mandates)
             dao.insertRefundLinkEntity(snapshot.refundLinks)
             dao.insertSettingEntity(snapshot.settings)
+            currentCoroutineContext().ensureActive()
             // Android permissions are device state, never restored from another installation.
             db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("sms","false"))
             db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("notifications","false"))

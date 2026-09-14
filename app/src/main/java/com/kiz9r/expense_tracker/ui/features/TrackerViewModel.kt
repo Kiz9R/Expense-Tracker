@@ -49,6 +49,8 @@ class TrackerViewModel @Inject constructor(
     private var currentAction: Job? = null
     val preview = MutableStateFlow<ImportPreview?>(null)
     val resolutions = MutableStateFlow<Map<Int,Resolution>>(emptyMap())
+    private var backupPreviewEpoch=0L
+    fun clearBackupPreview() { backupPreviewEpoch++;restorePreview.value=null }
     val restorePreview = MutableStateFlow<BackupSnapshot?>(null)
     val importJobs=statementJobs.jobs.stateIn(viewModelScope,sharing,emptyList())
     private var activeImportJob: String? = null
@@ -139,11 +141,19 @@ class TrackerViewModel @Inject constructor(
         activeImportJob=null
         preview.value=null; resolutions.value=emptyMap()
     }
-    fun export(uri: Uri, password: CharArray) = action("Encrypted backup saved.") { backup.export(uri,password) }
-    fun inspectBackup(uri: Uri, password: CharArray) = action { restorePreview.value=backup.inspect(uri,password) }
+    fun export(uri: Uri, password: CharArray) {
+        if(busy.value) { password.fill('\u0000'); return }
+        action("Encrypted backup saved.") { try { backup.export(uri,password) } finally {password.fill('\u0000')} }
+    }
+    fun inspectBackup(uri: Uri, password: CharArray) {
+        if(busy.value) { password.fill('\u0000'); return }
+        clearBackupPreview()
+        val epoch=backupPreviewEpoch
+        action { try { val result=backup.inspect(uri,password);if(epoch==backupPreviewEpoch)restorePreview.value=result } finally {password.fill('\u0000')} }
+    }
     fun restore() = action("Backup restored. Review tracking and security settings; app lock requires a device screen lock.") {
         backup.restore(requireNotNull(restorePreview.value))
-        restorePreview.value=null; preview.value=null; resolutions.value=emptyMap(); filter.value=HistoryFilter()
+        restorePreview.value=null; activeImportJob=null; preview.value=null; resolutions.value=emptyMap(); filter.value=HistoryFilter()
     }
     fun setting(key: String, enabled: Boolean) = action { ledger.setting(key,enabled.toString()) }
 }

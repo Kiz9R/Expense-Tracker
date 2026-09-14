@@ -22,11 +22,7 @@ class ExpenseApplication : Application()
 @InstallIn(SingletonComponent::class)
 object AppModule {
     @Provides @Singleton fun database(@ApplicationContext context: Context, keys: DatabaseKeys): LedgerDatabase {
-        System.loadLibrary("sqlcipher")
-        return Room.databaseBuilder(context, LedgerDatabase::class.java, "ledger.db")
-            .openHelperFactory(SupportOpenHelperFactory(keys.databasePassword()))
-            .addMigrations(com.kiz9r.expense_tracker.data.MIGRATION_1_2)
-            .build()
+        return com.kiz9r.expense_tracker.security.EncryptedLedger.open(context,keys)
     }
     @Provides @Singleton fun gson(): Gson = Gson()
 }
