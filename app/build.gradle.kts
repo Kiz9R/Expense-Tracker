@@ -20,8 +20,8 @@ android {
         applicationId = "com.kiz9r.expense_tracker"
         minSdk = 30
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 4
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

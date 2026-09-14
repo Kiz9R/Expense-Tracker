@@ -25,6 +25,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
     val mandates get() = dao.mandates()
     val rules get() = dao.rules()
     val settings get() = dao.settings()
+    val smsStats get() = dao.smsStats()
     suspend fun initialize() = db.withTransaction {
         if (dao.allCategories().isEmpty()) {
             listOf("Food & Dining","Groceries","Shopping","Transportation","Fuel","Rent","Utilities","Bills","Subscriptions",

@@ -84,3 +84,4 @@ data class MonthlyTotals(val spend: Long = 0, val income: Long = 0, val refunds:
     val net get() = income - netSpend
 }
 data class Breakdown(val label: String, val amount: Long)
+data class SmsStats(val received: Int = 0, val pending: Int = 0, val review: Int = 0)

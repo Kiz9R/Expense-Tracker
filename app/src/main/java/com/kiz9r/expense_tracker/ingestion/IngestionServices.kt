@@ -1,6 +1,9 @@
 package com.kiz9r.expense_tracker.ingestion
 
 import android.app.Notification
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.content.*
 import android.os.UserManager
 import android.provider.Telephony
@@ -20,6 +23,7 @@ interface IngestionEntryPoint {
     fun ledger(): LedgerRepository
     fun reconciliation(): ReconciliationRepository
     fun statementJobs(): StatementJobs
+    fun smsIntake(): SmsIntake
 }
 fun dependencies(context: Context): IngestionEntryPoint =
     EntryPointAccessors.fromApplication(context.applicationContext,IngestionEntryPoint::class.java)
@@ -31,22 +35,33 @@ class SbiSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if(intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION ||
             !context.getSystemService(UserManager::class.java).isUserUnlocked) return
-        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        val messages = runCatching { Telephony.Sms.Intents.getMessagesFromIntent(intent) }.getOrNull() ?: return
         if(messages.isEmpty()) return
-        val observation = SbiSmsParser.parse(messages.first().originatingAddress.orEmpty(),
-            messages.joinToString("") { it.messageBody.orEmpty() },System.currentTimeMillis(),messages.first().timestampMillis) ?: return
+        val parts=messages.map { SmsPart(it.originatingAddress.orEmpty(),it.messageBody.orEmpty(),it.timestampMillis) }
+        val receivedAt=System.currentTimeMillis()
         val pending = goAsync()
         CoroutineScope(SupervisorJob()+Dispatchers.IO).launch {
             try {
                 withTimeout(8000) {
                     val graph = dependencies(context)
-                    if(graph.ledger().enabled("sms")) {
-                        graph.reconciliation().enqueue(observation)
+                    if(graph.smsIntake().accept(parts,receivedAt,
+                            ContextCompat.checkSelfPermission(context,Manifest.permission.RECEIVE_SMS)==PackageManager.PERMISSION_GRANTED,
+                            context.getSystemService(UserManager::class.java).isUserUnlocked)) {
                         scheduleIngestion(context)
                     }
                 }
+            } catch (_: Exception) {
+                // No message payloads in logs or WorkManager. Recover any already-persisted observation.
+                runCatching { scheduleIngestion(context) }
             } finally { pending.finish() }
         }
+    }
+}
+class IngestionRecoveryReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if(intent.action !in listOf(Intent.ACTION_BOOT_COMPLETED,Intent.ACTION_MY_PACKAGE_REPLACED) ||
+            !context.getSystemService(UserManager::class.java).isUserUnlocked) return
+        runCatching { scheduleIngestion(context) }
     }
 }
 class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context,params) {

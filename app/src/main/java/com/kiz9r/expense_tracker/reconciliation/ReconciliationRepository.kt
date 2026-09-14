@@ -36,7 +36,15 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
         }
     }
     private suspend fun process(raw: RawEventEntity) {
-        val observation = gson.fromJson(raw.parsedJson,Observation::class.java)
+        val observation = observation(raw)
+        if(observation == null) {
+            dao.saveEvent(raw.copy(processed=true,reviewReason="Stored observation could not be read. Ignore it and add a manual entry if needed."))
+            return
+        }
+        if(observation.parseWarning != null) {
+            dao.saveEvent(raw.copy(processed=true,reviewReason=observation.parseWarning))
+            return
+        }
         val accounts = dao.allAccounts().filter { it.last4 == observation.accountLast4 && it.active }
         if (accounts.size != 1) {
             dao.saveEvent(raw.copy(processed=true,reviewReason="Choose the SBI account for this observation."))
@@ -44,11 +52,11 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
         }
         val accountId = accounts.single().id
         if (observation.kind in listOf(EventKind.MANDATE_CREATED,EventKind.MANDATE_CANCELLED)) {
-            val existing = if (observation.reference.isBlank()) emptyList() else dao.findMandates(observation.reference,accountId)
-            dao.saveMandate(MandateEntity(id=existing.singleOrNull()?.id ?: newId(),accountId=accountId,
-                merchant=observation.merchant,amountMinor=observation.amountMinor,reference=observation.reference,
-                status=if(observation.kind == EventKind.MANDATE_CANCELLED) "CANCELLED" else "ACTIVE",eventId=raw.id))
-            dao.saveEvent(raw.copy(processed=true)); return
+            if(observation.reference.isNotBlank() && dao.findMandates(observation.reference,accountId).size>1) {
+                dao.saveEvent(raw.copy(processed=true,reviewReason="Multiple mandates share this reference.")); return
+            }
+            recordMandate(raw,observation,accountId)
+            return
         }
         if (observation.amountMinor == null || observation.amountMinor <= 0 || observation.direction == null || observation.kind == EventKind.UNKNOWN) {
             dao.saveEvent(raw.copy(processed=true,reviewReason="Unrecognized financial format. Preserve for review; no spending recorded.")); return
@@ -60,29 +68,55 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
             is MatchDecision.Review -> dao.saveEvent(raw.copy(processed=true,reviewReason=decision.reason))
         }
     }
+    fun observation(raw: RawEventEntity): Observation? = runCatching {
+        gson.fromJson(raw.parsedJson,Observation::class.java).also {
+            requireNotNull(it.kind); requireNotNull(it.source); LocalDate.parse(it.date)
+        }
+    }.getOrNull()
     suspend fun reviewCandidates(eventId: String, accountId: String): List<MatchCandidate> {
         val event = requireNotNull(dao.event(eventId))
-        val obs = gson.fromJson(event.parsedJson,Observation::class.java)
-        return candidates(obs,accountId).map(::candidate)
+        val obs = observation(event) ?: return emptyList()
+        if(obs.kind == EventKind.UNKNOWN || obs.parseWarning != null) return emptyList()
+        return candidates(obs,accountId).filter { it.amountMinor==obs.amountMinor && it.direction==obs.direction &&
+            (it.reference.isBlank() || obs.reference.isBlank() || it.reference==obs.reference) }
+            .map { candidateWithEvidence(it) }.sortedByDescending { matcher.score(obs,it) }
     }
     suspend fun resolveEvent(eventId: String, accountId: String, resolution: Resolution) = db.withTransaction {
         val raw = requireNotNull(dao.event(eventId))
         require(raw.reviewReason != null) { "This observation has already been resolved." }
-        require(dao.allAccounts().any { it.id == accountId }) { "Choose an account." }
-        val observation = gson.fromJson(raw.parsedJson,Observation::class.java)
+        require(resolution.action in listOf("new","match","ignore") &&
+            ((resolution.action=="match") == (resolution.transactionId!=null))) { "Choose a valid resolution." }
+        var transactionId: String? = null
         if (resolution.action == "ignore") {
             dao.saveEvent(raw.copy(processed=true,reviewReason=null))
-        } else if (observation.kind in listOf(EventKind.MANDATE_CREATED,EventKind.MANDATE_CANCELLED)) {
-            val existing = if (observation.reference.isBlank()) emptyList() else dao.findMandates(observation.reference,accountId)
-            dao.saveMandate(MandateEntity(id=existing.singleOrNull()?.id ?: newId(),accountId=accountId,
-                merchant=observation.merchant,amountMinor=observation.amountMinor,reference=observation.reference,
-                status=if(observation.kind == EventKind.MANDATE_CREATED) "ACTIVE" else "CANCELLED",eventId=raw.id))
-            dao.saveEvent(raw.copy(processed=true,reviewReason=null))
         } else {
-            require(observation.kind != EventKind.UNKNOWN) { "Unknown formats cannot be converted automatically. Add a manual entry, then ignore this observation." }
-            attach(raw,observation,accountId,resolution.transactionId,false,"user-confirmed")
+            val observation = requireNotNull(observation(raw)) { "This observation cannot be read. Ignore it and add a manual entry." }
+            val account = requireNotNull(dao.allAccounts().find { it.id==accountId && it.active }) { "Choose an account." }
+            require(observation.accountLast4 == null || observation.accountLast4 == account.last4) { "Account digits do not match this message." }
+            require(observation.kind != EventKind.UNKNOWN && observation.parseWarning == null) {
+                "Uncertain financial facts cannot be converted automatically. Add a manual entry, then ignore this observation."
+            }
+            if (observation.kind in listOf(EventKind.MANDATE_CREATED,EventKind.MANDATE_CANCELLED)) {
+                require(resolution.action=="new") { "A mandate is separate from a transaction." }
+                recordMandate(raw,observation,accountId)
+            } else {
+                transactionId = attach(raw,observation,accountId,resolution.transactionId,false,"user-confirmed")
+            }
         }
-        dao.saveDecision(ReviewDecisionEntity(observationKey=raw.identity,action=resolution.action,transactionId=resolution.transactionId))
+        dao.saveDecision(ReviewDecisionEntity(observationKey=raw.identity,action=resolution.action,transactionId=transactionId))
+    }
+    private suspend fun recordMandate(raw: RawEventEntity, observation: Observation, accountId: String) {
+        val existing = if(observation.reference.isBlank()) emptyList() else dao.findMandates(observation.reference,accountId)
+        require(existing.size<=1) { "Multiple mandates share this reference. Keep this observation for review." }
+        val previous=existing.singleOrNull()
+        val previousEvent=previous?.let { dao.event(it.eventId) }
+        val previousTime=previousEvent?.let { this.observation(it)?.timestamp ?: it.receivedAt } ?: Long.MIN_VALUE
+        if((observation.timestamp ?: raw.receivedAt)>=previousTime) {
+            dao.saveMandate(MandateEntity(id=previous?.id ?: newId(),accountId=accountId,
+                merchant=observation.merchant,amountMinor=observation.amountMinor ?: previous?.amountMinor,reference=observation.reference,
+                status=if(observation.kind==EventKind.MANDATE_CREATED) "ACTIVE" else "CANCELLED",eventId=raw.id))
+        }
+        dao.saveEvent(raw.copy(processed=true,reviewReason=null))
     }
     suspend fun preview(accountId: String, fileName: String, fileHash: String, statement: ParsedStatement): ImportPreview = db.withTransaction {
         statement.validateForImport()
@@ -255,6 +289,7 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
         } else if (existing != null && tx.verification != Verification.VERIFIED) {
             tx = tx.copy(reference=tx.reference.ifBlank { obs.reference },verification=Verification.LIKELY_MATCHED,
                 outcome=if(obs.kind==EventKind.FAILED) tx.outcome else Outcome.POSTED,
+                kind=if(tx.kind==EventKind.FAILED && obs.kind!=EventKind.FAILED) obs.kind else tx.kind,
                 updatedAt=System.currentTimeMillis())
         }
         dao.saveTransaction(tx)

@@ -18,3 +18,4 @@ local.properties
 signing.properties
 /artifacts/
 /testAccountStatementCopy*.pdf
+/sms-*.xml

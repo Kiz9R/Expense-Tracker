@@ -112,3 +112,83 @@ Evidence: [main build](build/account-deletion-build.txt), [corrected test build]
 Rebuilt artifact: [app-release.apk](app/build/outputs/apk/release/app-release.apk), version 1.1 / code 2, 17,945,969 bytes. SHA-256: **6E1A58361A6307BFC5BAF97134812EBA5A4D50D56084B4A8908D2A372DB2F16D**. This supersedes the earlier PDF-build hash for the current artifact.
 
 Physical-phone confirmation, accessibility/large fonts, final-account onboarding and lifecycle QA remain pending. Deletion affects local records only; exported backups and the actual SBI account are unchanged.
+
+## 14 September 2026 — SMS system update (version 1.2)
+
+Implemented version 2 conservative SMS extraction, opt-in/permission/unlock intake, bounded same-sender multipart assembly, idempotent encrypted observation writes, recoverable background processing and explicit review. Settings now reflects actual SMS permission, diagnostic counts, receipt time and pending retry. Added boot-after-unlock/app-update recovery; no historical SMS permission or scan. Observation JSON gains nullable balanceMinor and parseWarning; Room schema remains version 2.
+
+Executed:
+
+- **33 JVM tests passed**: FinanceTest 14, RelationshipParserTest 7, SmsParserTest 12.
+- **Default Android run: OK (49 tests), 54.102 seconds**. Of these, 47 executed successfully; the private-PDF test and external-SMS fixture were skipped because their opt-in arguments were absent.
+- **Opt-in SmsReceiverDeliveryTest passed**, 22.323 seconds, on the Android 17 disposable emulator. RECEIVE_SMS was granted only on that emulator. Long synthetic text from AD-SBIINB traveled through Android multipart assembly/SMS_RECEIVED, the actual receiver, encrypted intake and WorkManager. Repeated delivery produced one provisional transaction, full assembled text was retained as evidence, and a synthetic OTP was not persisted. Its synthetic account was deleted and tracking disabled by test cleanup.
+- Eight new Room tests cover off/denied/pre-unlock gates; concurrent multipart retries and statement verification; uncertain/pending review with account-free ignore; mask collision and target persistence; malformed stored data followed by valid SMS; mandate cancellation versus late creation; failure → success → late failure; and statement-first/late SMS evidence.
+- Compose review test confirms uncertain SMS cannot be blindly committed, exposes manual entry, and permits explicit ignore.
+- Debug/test installation, unit tests, lint and signed release assembly passed. Final lint: **zero errors, 16 warnings**. The newly introduced URI KTX warning was fixed.
+- The complete default suite ran before the final URI KTX substitution and receiver-fixture-only correction; the final source was rebuilt/unit-tested/linted and its actual receiver test passed. No unnecessary repeat of the unchanged financial suite was performed.
+
+Build command:
+
+    .\gradlew.bat :app:testDebugUnitTest :app:installDebug :app:installDebugAndroidTest :app:lintDebug :app:assembleRelease --offline
+
+Default Android command:
+
+    adb -s emulator-5554 shell am instrument -w com.kiz9r.expense_tracker.test/androidx.test.runner.AndroidJUnitRunner
+
+Opt-in delivery:
+
+    adb -s emulator-5554 shell pm grant com.kiz9r.expense_tracker android.permission.RECEIVE_SMS
+    adb -s emulator-5554 shell am instrument -w -r -e class com.kiz9r.expense_tracker.SmsReceiverDeliveryTest -e sms_delivery true com.kiz9r.expense_tracker.test/androidx.test.runner.AndroidJUnitRunner
+
+After the test reports sms_fixture=ready, run the synthetic [fixture](app/src/androidTest/sms-emulator-fixture.py) from a second terminal:
+
+    python app/src/androidTest/sms-emulator-fixture.py --adb <absolute-path-to-adb>
+
+Evidence: [final build](build/sms-build-delivery.txt), [default Android run](build/sms-device.txt), [successful SMS broadcast run](build/sms-broadcast-device-final.txt), [unit reports](app/build/reports/tests/testDebugUnitTest), [lint](app/build/reports/lint-results-debug.html).
+
+The [initial broadcast attempt](build/sms-broadcast-device.txt) timed out because the emulator accepted raw-PDU console commands without delivering them. A plain-text probe did deliver; switching the fixture to the emulator SMS text command with an alphanumeric origin and a message longer than 160 characters produced the passing test. This was a fixture/console-path correction; sender filtering and receiver permissions were retained.
+
+Artifact: [app-release.apk](app/build/outputs/apk/release/app-release.apk), **version 1.2 / code 3**, **17,978,833 bytes**. SHA-256: **8C11A7A129526591A0CFA3CD75FFBE82A1814A1DA965C3DE8E1DDEC26B594013**. APK v2 signature verified with the existing personal signer, certificate SHA-256 **CAE7C0C84FB2D31A72FD32C8376294BBB77107DE173FC8B67E21B07B0C4EE152**. No signing material was changed.
+
+Remaining: the user explicitly deferred real SBI SMS samples. Actual bank formats, physical-phone carrier delivery, denied/revoked permission UI, first-unlock/reboot/OEM/force-stop/app-lock lifecycle, accessibility and signed phone-update QA are not certified. Unit/integration unlock and permission gates are simulations; no physical reboot claim is made. No real PDF/password was used or reread during this update. Earlier PDF validation remains dated evidence.
+
+## 14 September 2026 — Supplied SMS XML validation (version 1.2.1)
+
+The user subsequently supplied sms-20260914211524.xml. A secure, opt-in host SAX test streams the XML with external entities/DTDs disabled, selects incoming SBI messages, and checks independent expected classifications and financial fields. Only aggregate results are logged. The original file is unchanged (SHA-256 checked), excluded by /sms-*.xml, and never copied into app storage, the emulator or synthetic fixtures. This adds no historical-SMS/XML import capability.
+
+The corpus contains 2,162 SMS records, of which **299 are incoming SBI messages**. The initial SBI-prefix audit found 272; an independent broader sender audit found another 27 from ATMSBI/CBSSBI. The final allowlist explicitly supports those sender families. Final classification/field audit: **zero mismatches**.
+
+| Observed family | Count | Expected handling |
+| --- | ---: | --- |
+| UPI debit / compact-date credit | 130 / 33 | Posted financial observations |
+| NEFT / linked IMPS credit | 11 / 2 | Posted financial observations |
+| Card debit | 7 | Posted observation; account assignment required |
+| CBS credit / cheque credit / cash deposit | 3 / 1 / 2 | Posted financial observations |
+| Cheque clearing / NACH execution debit | 1 / 5 | Posted financial observations |
+| UPI mandate created / cancelled | 11 / 13 | Separate mandate evidence; no spending |
+| UMRN mandate issued | 1 | Separate mandate evidence; no spending |
+| Scheduled AutoPay / collect request | 29 / 1 | UNKNOWN / Needs Review; no spending |
+| Informational, promotional or credential messages | 49 | Discard before persistence |
+
+Parser 2.1.0 fixes observed currency-less amounts, compact dates, counterparties, UMN/UMRN and cheque/card references, AC account labels, and transaction-versus-balance amounts. Card suffixes never identify accounts. Longer masked account suffixes are reduced to four digits in persisted evidence; account labels require a word boundary so merchant text cannot manufacture an account. Existing ingestion identities and Room schema 2 remain unchanged.
+
+Final executed checks:
+
+- **45 JVM tests passed**, no skips: FinanceTest 14, RelationshipParserTest 7, SmsParserTest 12, SbiObservedLayoutsTest 11, ProvidedSmsXmlTest 1. Reusable regressions contain invented values only.
+- **Android runner OK (53 tests), 41.324 seconds**, on the disposable Android 17 emulator: 51 executed passes and two opt-in skips (private PDF and external SMS delivery). Twelve SMS Room cases include statement matching, distinct same-value UMN mandates, card-only account review/deduplication, and NACH/cash movement amounts. Earlier external-broadcast and private-PDF evidence remains historical; those fixtures were not rerun here.
+- Final unit tests, debug/test installation, lint and signed release assembly succeeded after the account-boundary guard. Lint: **zero errors, 16 warnings**. Build time: 2m 14s.
+- Exactly one root featureDevelopmentInfo.md remains. Local links in README, rules, both root tracking/development documents and this evidence file resolve.
+
+Final build command (SBI_SMS_FIXTURE_PATH set to the supplied local XML only in the host test process):
+
+    .\gradlew.bat :app:testDebugUnitTest :app:installDebug :app:installDebugAndroidTest :app:lintDebug :app:assembleRelease --offline
+
+Final Android command:
+
+    adb -s emulator-5554 shell am instrument -w com.kiz9r.expense_tracker.test/androidx.test.runner.AndroidJUnitRunner
+
+Evidence: [final build](build/sms-xml-delivery-build.txt), [final Android run](build/sms-xml-delivery-device.txt), [unit reports](app/build/reports/tests/testDebugUnitTest), [lint](app/build/reports/lint-results-debug.html). Initial audit/regression failures exposed currency-less debit and service filtering gaps, strict comma validation, and test-expectation escaping/trailing-punctuation mistakes; all were resolved before the final passing run.
+
+Artifact: [app-release.apk](app/build/outputs/apk/release/app-release.apk), **version 1.2.1 / code 4**, **17,978,833 bytes**. SHA-256: **974C0AD40A95023F0D786C0EB2BC52255FCE9F09782DB242037F856E5E5C502E**. APK v2 signature verified with the existing personal signer, certificate SHA-256 **CAE7C0C84FB2D31A72FD32C8376294BBB77107DE173FC8B67E21B07B0C4EE152**. No signing material changed.
+
+Remaining: observed layouts are validated against this sample, not every SBI format. Other ATM, fee, refund/reversal and notification formats need source fixtures. Carrier delivery, phone installer/permission changes, first-unlock/reboot/OEM/force-stop/app-lock behavior, accessibility and signed phone-update QA remain pending. No physical-phone or historical-ledger-import claim is made.

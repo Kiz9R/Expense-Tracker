@@ -8,7 +8,7 @@ Current implementation gaps, experimental support and pending validation are tra
 
 - Multiple masked SBI accounts; manual debit/credit entries; categories, tags, notes, merchant display names, hiding and search.
 - Monthly dashboard with income, spending, refunds, net cash flow, breakdowns, comparisons, largest expenses and recurring-payment suggestions.
-- New SBI SMS ingestion with versioned classification, background processing, duplicate protection and a review queue.
+- Incoming SBI SMS tracking with permission-aware status, version 2 conservative parsing, multipart deduplication, background recovery and explicit Needs Review resolution. Observed SBI UPI, NEFT/IMPS, card, CBS, NACH, cash, cheque and mandate formats have been validated against the supplied XML sample.
 - Password-protected SBI Relationship Summary PDF import, durable review drafts, reconciliation summaries, exact/logical duplicate detection, atomic commits and later resolution of ignored rows.
 - Canonical transactions with separate source evidence, bank facts, user metadata, verification, payment outcome and visibility.
 - Partial/full refunds and reversals; failed transactions and mandate creation excluded from spending.
@@ -37,6 +37,14 @@ Signed release APK, when local signing configuration is present: app/build/outpu
 The local, gitignored signing.properties and personal-release.jks are signing material created for this personal build. Keep secure copies: future APK updates need the same key. Do not publish either file or its contents. Financial backups do not contain APK signing material.
 
 On another development machine, supply private signing.properties with storeFile, storePassword, keyAlias, and keyPassword. Without it, release assembly produces an unsigned APK. A debug-signed installation cannot be updated with the personal release key; use encrypted backup/restore when switching signatures.
+
+## SMS tracking
+
+Enable **Settings → Track new SBI SMS**, then grant incoming-SMS permission. The app never scans old messages. Settings displays effective tracking status, counts and the last eligible message received; use Android app permissions if permission was denied or revoked. Stored pending observations can be retried locally.
+
+Recognized messages create provisional transactions. Pending payments, ambiguous amounts/references, invalid dates and unknown financial formats stay in Needs Review. Select an account and resolution explicitly; uncertain facts require a manual entry followed by ignoring the observation. OTPs/PIN messages, promotions and unrelated senders are discarded before storage. PDF statements verify detected transactions and recover missed activity.
+
+The supplied XML sample validates 299 SBI messages: 195 posted movements, 25 mandate events, 30 scheduled/collect requests held for review, and 49 service/promotional messages ignored. Parser 2.1 supports the observed amounts without Rs, compact dates, counterparty boundaries and UMN/UMRN identifiers, ATMSBI/CBSSBI senders and movement-versus-balance amounts. Seven card-only alerts require account selection in Needs Review; a card suffix is never assumed to identify an account. Other ATM, fee, refund and reversal wording absent from the sample still has synthetic-only coverage. The XML was used for development validation; the app continues to read only new incoming SMS. Physical phone/OEM delivery and reboot checks remain pending. Force-stop and carrier restrictions may prevent receipt. Background processing resumes only after the first device unlock following reboot.
 
 ## First use
 

@@ -10,6 +10,8 @@ const val ITEM_QUERY = """SELECT t.*, COALESCE(NULLIF(m.merchantDisplay, ''), t.
     LEFT JOIN metadata m ON m.transactionId=t.id LEFT JOIN categories c ON c.id=m.categoryId """
 @Dao
 interface LedgerDao {
+    @Query("SELECT COUNT(*) AS received, COALESCE(SUM(CASE WHEN processed=0 THEN 1 ELSE 0 END),0) AS pending, COALESCE(SUM(CASE WHEN reviewReason IS NOT NULL THEN 1 ELSE 0 END),0) AS review FROM events WHERE source='SBI_SMS'")
+    fun smsStats(): Flow<SmsStats>
     @Query("DELETE FROM review_decisions WHERE transactionId IN (SELECT id FROM transactions WHERE accountId=:accountId) OR observationKey IN (SELECT identity FROM events WHERE id IN (SELECT eventId FROM evidence WHERE transactionId IN (SELECT id FROM transactions WHERE accountId=:accountId) UNION SELECT eventId FROM mandates WHERE accountId=:accountId)) OR EXISTS (SELECT 1 FROM statement_imports s WHERE s.accountId=:accountId AND substr(observationKey,1,length('statement:' || s.logicalFingerprint || ':'))='statement:' || s.logicalFingerprint || ':')")
     suspend fun deleteAccountDecisions(accountId: String)
     @Query("DELETE FROM events WHERE id IN (SELECT eventId FROM evidence WHERE transactionId IN (SELECT id FROM transactions WHERE accountId=:accountId) UNION SELECT eventId FROM mandates WHERE accountId=:accountId) AND NOT EXISTS (SELECT 1 FROM mandates m WHERE m.eventId=events.id AND (m.accountId IS NULL OR m.accountId!=:accountId)) AND NOT EXISTS (SELECT 1 FROM evidence e JOIN transactions t ON t.id=e.transactionId WHERE e.eventId=events.id AND t.accountId!=:accountId)")

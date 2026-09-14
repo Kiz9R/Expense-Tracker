@@ -210,37 +210,68 @@ private fun candidateLabel(candidate: MatchCandidate): String {
         }},dismiss={confirmation=false})
 }
 
-@Composable fun ReviewScreen(vm: TrackerViewModel) {
+@Composable fun ReviewScreen(vm: TrackerViewModel, addManual: () -> Unit = {}) {
     val events by vm.reviews.collectAsStateWithLifecycle()
     val accounts by vm.accounts.collectAsStateWithLifecycle()
+    val busy by vm.busy.collectAsStateWithLifecycle()
     var eventId by rememberSaveable {mutableStateOf("")}
-    var account by rememberSaveable {mutableStateOf(accounts.firstOrNull()?.id.orEmpty())}
-    var target by rememberSaveable {mutableStateOf("new")}
+    var account by rememberSaveable {mutableStateOf("")}
+    var target by rememberSaveable {mutableStateOf("")}
+    var source by rememberSaveable {mutableStateOf("")}
     var candidates by remember {mutableStateOf(emptyList<MatchCandidate>())}
-    LaunchedEffect(eventId,account) {
-        candidates=if(eventId.isNotBlank() && account.isNotBlank())
-            runCatching {vm.reconciliation.reviewCandidates(eventId,account)}.getOrDefault(emptyList()) else emptyList()
+    var loading by remember {mutableStateOf(false)}
+    LaunchedEffect(eventId,account,events) {
+        loading=true; candidates=emptyList()
+        try {
+            if(eventId.isNotBlank() && account.isNotBlank() && events.any { it.id==eventId })
+                candidates=vm.reconciliation.reviewCandidates(eventId,account)
+        } catch(e: kotlinx.coroutines.CancellationException) {throw e}
+        catch(_: Exception) {vm.message.value="Unable to load suggestions. Select the observation again."}
+        finally {loading=false}
     }
     Screen("review") {
-        Heading("Needs review","Ambiguous observations stay here until you resolve them.")
-        if(events.isEmpty()) Notice("Nothing needs review.")
-        events.forEach {event ->
-            OutlinedCard(onClick={eventId=event.id;target="new"},modifier=Modifier.fillMaxWidth()) {
+        Heading("Needs review","Choose the account and resolution explicitly. Uncertain amounts or payment states never increase spending.")
+        Choice("Source",source,listOf("" to "All sources",Source.SBI_SMS.name to "SBI SMS"),"review.source"){source=it}
+        val visible=events.filter {source.isBlank() || it.source.name==source}
+        if(visible.isEmpty()) Notice("Nothing needs review.")
+        visible.forEach {event ->
+            val parsed=remember(event){vm.reconciliation.observation(event)}
+            val uncertain=parsed==null || parsed.kind==EventKind.UNKNOWN || parsed.parseWarning!=null
+            val mandate=parsed?.kind in listOf(EventKind.MANDATE_CREATED,EventKind.MANDATE_CANCELLED)
+            OutlinedCard(onClick={if(!busy) {eventId=event.id;target="";account=""}},
+                modifier=Modifier.fillMaxWidth().testTag("review.items."+event.id)) {
                 Column(Modifier.padding(16.dp)) {
                     Text(event.source.name.replace('_',' '))
                     Text(event.content)
+                    Text("Received "+java.time.Instant.ofEpochMilli(event.receivedAt).atZone(Dates.zone).toLocalDateTime())
+                    parsed?.let {
+                        Text("Account "+(it.accountLast4?.let { suffix -> "••••"+suffix } ?: "not identified")+
+                            " · "+it.kind.name.replace('_',' '))
+                        Text("Transaction date "+it.date+" · Reference "+it.reference.ifBlank {"not available"})
+                        it.amountMinor?.let { amount -> Text("Parsed amount "+Money.format(amount)) }
+                        it.balanceMinor?.let { balance -> Text("Reported balance "+Money.format(balance)) }
+                    }
                     Text(event.reviewReason.orEmpty(),color=MaterialTheme.colorScheme.error)
                 }
             }
             if(eventId==event.id) {
-                Choice("Account",account,accounts.map {it.id to (it.nickname+" ••••"+it.last4)},"review.account"){account=it}
-                Choice("Resolution",target,listOf("new" to "Create new / record mandate","ignore" to "Ignore observation")+
-                    candidates.map {it.id to (it.merchant+" · "+it.date+" · "+Money.format(it.amountMinor)+" "+it.direction)},
-                    "review.resolution"){target=it}
+                val eligible=accounts.filter { it.active && (parsed?.accountLast4==null || it.last4==parsed.accountLast4) }
+                if(!uncertain) Choice("Account",account,listOf("" to "Choose account")+eligible.map {it.id to (it.nickname+" ••••"+it.last4)},
+                    "review.account"){if(!busy){account=it;target=""}}
+                if(uncertain) {
+                    Notice("This message cannot safely create a transaction. Add a manual entry if appropriate, then ignore the message.")
+                    OutlinedButton(onClick=addManual,enabled=!busy,modifier=Modifier.testTag("review.manual")){Text("Add manual entry")}
+                }
+                val options=listOf("" to "Choose resolution","ignore" to "Ignore observation")+
+                    (if(!uncertain && account.isNotBlank()) listOf("new" to if(mandate) "Record mandate" else "Create separate transaction") else emptyList())+
+                    (if(!uncertain && !mandate) candidates.map {it.id to candidateLabel(it)} else emptyList())
+                Choice("Resolution",target,options,"review.resolution"){if(!busy)target=it}
                 Button(onClick={vm.action("Observation resolved.") {
                     vm.reconciliation.resolveEvent(event.id,account,if(target in listOf("new","ignore")) Resolution(target) else Resolution("match",target))
-                    eventId=""
-                }},modifier=Modifier.testTag("review.confirm")){Text("Confirm resolution")}
+                    eventId="";account="";target=""
+                }},enabled=!busy && !loading && target.isNotBlank() && options.any {it.first==target} &&
+                    (target=="ignore" || eligible.any {it.id==account}),
+                    modifier=Modifier.testTag("review.confirm")){Text("Confirm resolution")}
             }
         }
     }

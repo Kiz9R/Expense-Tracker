@@ -54,7 +54,7 @@ import androidx.navigation.compose.*
                 composable("categories") { CategoriesScreen(vm) }
                 composable("settings") { SettingsScreen(vm) {nav.navigate(it)} }
                 composable("accounts") { AccountScreen(vm,false) {nav.popBackStack()} }
-                composable("review") { ReviewScreen(vm) }
+                composable("review") { ReviewScreen(vm) {nav.navigate("add")} }
                 composable("mandates") { MandatesScreen(vm) }
                 composable("rules") { RulesScreen(vm) }
                 composable("backup") { BackupScreen(vm) }

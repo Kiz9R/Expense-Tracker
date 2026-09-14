@@ -39,14 +39,15 @@ fun hash(text: String): String = hash(text.toByteArray(Charsets.UTF_8))
 fun normalized(text: String): String = text.uppercase(Locale.ROOT).replace(Regex("[^A-Z0-9]"), "")
 fun newId(): String = java.util.UUID.randomUUID().toString()
 fun maskAccounts(text: String): String = text.replace(
-    Regex("(?i)((?:a/c|acct?|account)(?:\\s*(?:no\\.?|number))?\\s*[:.\\-]?\\s*)(\\d{8,18})")
+    Regex("(?i)\\b((?:a/?c|acct?|account)(?:\\s*(?:no\\.?|number))?\\s*[:.\\-]?\\s*)[Xx*•]*(\\d{5,18})")
 ) { it.groupValues[1] + "••••" + it.groupValues[2].takeLast(4) }
 data class Observation(
     val source: Source, val identity: String, val receivedAt: Long, val timestamp: Long? = null,
     val date: String, val accountLast4: String? = null, val amountMinor: Long? = null,
     val direction: Direction? = null, val merchant: String = "", val reference: String = "",
     val channel: Channel = Channel.UNKNOWN, val kind: EventKind, val content: String,
-    val parserVersion: String = "1.0.0"
+    val parserVersion: String = "1.0.0", val parseWarning: String? = null,
+    val balanceMinor: Long? = null
 )
 data class MatchCandidate(
     val id: String, val accountId: String, val amountMinor: Long, val direction: Direction,

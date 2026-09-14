@@ -42,6 +42,7 @@ class TrackerViewModel @Inject constructor(
     val recurring = filter.flatMapLatest { ledger.recurring(it.accountId) }.stateIn(viewModelScope,sharing,emptyList())
     val imports = ledger.imports.stateIn(viewModelScope,sharing,emptyList())
     val reviews = ledger.reviews.stateIn(viewModelScope,sharing,emptyList())
+    val smsStats = ledger.smsStats.stateIn(viewModelScope,sharing,SmsStats())
     val mandates = ledger.mandates.stateIn(viewModelScope,sharing,emptyList())
     val rules = ledger.rules.stateIn(viewModelScope,sharing,emptyList())
     val importing = MutableStateFlow(false)

@@ -17,7 +17,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.kiz9r.expense_tracker.data.*
 import com.kiz9r.expense_tracker.domain.*
 
@@ -25,26 +29,50 @@ import com.kiz9r.expense_tracker.domain.*
     val context=LocalContext.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val reviews by vm.reviews.collectAsStateWithLifecycle()
+    val stats by vm.smsStats.collectAsStateWithLifecycle()
+    val lifecycle=LocalLifecycleOwner.current
+    fun hasSmsPermission()=ContextCompat.checkSelfPermission(context,Manifest.permission.RECEIVE_SMS)==PackageManager.PERMISSION_GRANTED
+    var smsGranted by remember { mutableStateOf(hasSmsPermission()) }
+    DisposableEffect(lifecycle) {
+        val observer=LifecycleEventObserver { _,event -> if(event==Lifecycle.Event.ON_RESUME) smsGranted=hasSmsPermission() }
+        lifecycle.lifecycle.addObserver(observer)
+        onDispose { lifecycle.lifecycle.removeObserver(observer) }
+    }
     fun enabled(key: String)=settings.any {it.key==key && it.value=="true"}
     val sms=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        smsGranted=it
         vm.setting("sms",it)
         if(!it) vm.message.value="SMS access was not granted. Manual tracking and statement imports still work."
     }
     Screen("settings") {
         Heading("Settings","Private by default. Your financial data is stored in an encrypted database on this device.")
         OutlinedButton(onClick={navigate("accounts")},modifier=Modifier.testTag("settings.accounts")){Text("Manage SBI accounts")}
-        OutlinedButton(onClick={navigate("review")}){Text("Needs review ("+reviews.size+")")}
+        OutlinedButton(onClick={navigate("review")},modifier=Modifier.testTag("settings.review")){Text("Needs review ("+reviews.size+")")}
         OutlinedButton(onClick={navigate("mandates")}){Text("Mandates")}
         OutlinedButton(onClick={navigate("rules")}){Text("Merchant rules")}
         OutlinedButton(onClick={navigate("backup")}){Text("Encrypted backup & restore")}
         HorizontalDivider()
         Heading("Optional tracking")
         Text("SMS access detects new SBI financial messages. Other messages and OTPs are discarded. Past SMS history is never scanned.")
-        Toggle("Track new SBI SMS",enabled("sms"),"settings.sms") {
+        Toggle("Track new SBI SMS",enabled("sms") && smsGranted,"settings.sms") {
             if(!it) vm.setting("sms",false)
             else if(ContextCompat.checkSelfPermission(context,Manifest.permission.RECEIVE_SMS)==PackageManager.PERMISSION_GRANTED) vm.setting("sms",true)
             else sms.launch(Manifest.permission.RECEIVE_SMS)
         }
+        Text(when {
+            enabled("sms") && !smsGranted -> "SMS tracking paused: Android permission is missing."
+            enabled("sms") -> "SMS tracking enabled for new incoming messages."
+            else -> "SMS tracking is off."
+        },modifier=Modifier.testTag("settings.sms.status"))
+        Text("Stored financial SMS: "+stats.received+" · Pending: "+stats.pending+" · Needs review: "+stats.review)
+        settings.firstOrNull { it.key=="sms_last_received" }?.value?.toLongOrNull()?.let {
+            Text("Last eligible SMS received: "+java.time.Instant.ofEpochMilli(it).atZone(Dates.zone).toLocalDateTime())
+        }
+        if(!smsGranted) OutlinedButton(onClick={context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,("package:"+context.packageName).toUri()))},
+            modifier=Modifier.testTag("settings.sms.permissions")){Text("Open Android app permissions")}
+        if(stats.pending>0) OutlinedButton(onClick={vm.action("Pending observations processed."){vm.reconciliation.processPending()}},
+            modifier=Modifier.testTag("settings.sms.retry")){Text("Retry stored observations")}
+        Text("Only newly delivered messages are read. After a reboot, tracking resumes after your first device unlock. Missed activity can be recovered from a statement. Unknown formats stay in Needs Review.",style=MaterialTheme.typography.bodySmall)
         Text("Experimental PhonePe and Google Pay support. Notification access is separate from SMS access. Uncertain accounts require review.")
         Toggle("Track supported UPI notifications",enabled("notifications"),"settings.notifications"){vm.setting("notifications",it)}
         OutlinedButton(onClick={context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))}){Text("Open Android notification access")}

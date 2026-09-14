@@ -12,7 +12,7 @@ class MandateParser : MessageParser {
     override fun canParse(text: String) = Regex("(?i)mandate|autopay").containsMatchIn(text)
     override fun kind(text: String) = when {
         Regex("(?i)cancel|revok").containsMatchIn(text) -> EventKind.MANDATE_CANCELLED
-        Regex("(?i)created|registered|approved|set up").containsMatchIn(text) -> EventKind.MANDATE_CREATED
+        Regex("(?i)created|registered|approved|set up|issued to").containsMatchIn(text) -> EventKind.MANDATE_CREATED
         Regex("(?i)will be|scheduled|pre.debit|due on|to be debited").containsMatchIn(text) -> EventKind.UNKNOWN
         Regex("(?i)debited|executed|paid successfully").containsMatchIn(text) -> EventKind.MANDATE_EXECUTED
         else -> EventKind.UNKNOWN
@@ -24,57 +24,63 @@ class FailedParser : MessageParser {
 }
 class ReversalParser : MessageParser {
     override fun canParse(text: String) = Regex("(?i)reversed|reversal").containsMatchIn(text)
-    override fun kind(text: String) = EventKind.REVERSAL
+    override fun kind(text: String) = if(Regex("(?i)reversed|credited").containsMatchIn(text)) EventKind.REVERSAL else EventKind.UNKNOWN
 }
 class RefundParser : MessageParser {
     override fun canParse(text: String) = Regex("(?i)refund").containsMatchIn(text)
-    override fun kind(text: String) = EventKind.REFUND
+    override fun kind(text: String) = if(Regex("(?i)refunded|credited|received").containsMatchIn(text)) EventKind.REFUND else EventKind.UNKNOWN
 }
 class DebitParser : MessageParser {
-    override fun canParse(text: String) = Regex("(?i)debited|withdrawn|spent|paid\\s+(?:to|at)|paid successfully|payment of").containsMatchIn(text)
+    override fun canParse(text: String) = Regex("(?i)debited|has a debit by|withdrawn|spent|paid\\s+(?:to|at)|paid successfully|payment of").containsMatchIn(text) || SbiObservedLayouts.isCardDebit(text)
     override fun kind(text: String) = EventKind.DEBIT
 }
 class CreditParser : MessageParser {
-    override fun canParse(text: String) = Regex("(?i)credited|received\\s+(?:from|₹|Rs|INR)").containsMatchIn(text)
+    override fun canParse(text: String) = Regex("(?i)credited|has (?:a )?credit (?:for|by)|received\\s+(?:from|₹|Rs|INR)").containsMatchIn(text)
     override fun kind(text: String) = EventKind.CREDIT
 }
+class PendingParser : MessageParser {
+    override fun canParse(text: String) = Regex("(?i)pending|processing|initiated|will be|to be (?:debited|credited|reversed|refunded)|scheduled|refund requested|refund initiated|reversal requested").containsMatchIn(text)
+    override fun kind(text: String) = EventKind.UNKNOWN
+}
 object SbiSmsParser {
-    private val parsers = listOf(FailedParser(),MandateParser(),ReversalParser(),RefundParser(),DebitParser(),CreditParser())
-    fun isSbiSender(sender: String) = Regex("(?i)^(?:[A-Z0-9]{2}-)?(?:SBI[A-Z0-9]*)(?:-[A-Z])?$").matches(sender.trim())
+    const val VERSION = "2.1.0"
+    private val parsers = listOf(FailedParser(),PendingParser(),MandateParser(),ReversalParser(),RefundParser(),DebitParser(),CreditParser())
+    fun isSbiSender(sender: String) = Regex("(?i)^(?:[A-Z0-9]{2}-)?(?:SBI[A-Z0-9]*|ATMSBI|CBSSBI)(?:-[A-Z])?$").matches(sender.trim())
     fun parse(sender: String, content: String, receivedAt: Long, messageTimestamp: Long = receivedAt): Observation? {
         if (!isSbiSender(sender)) return null
-        return parseFinancial(Source.SBI_SMS,content,receivedAt,messageTimestamp,hash("sms|$sender|$messageTimestamp|$content"))
+        return parseFinancial(Source.SBI_SMS,content,receivedAt,messageTimestamp,hash("sms|"+sender.trim().uppercase(Locale.ROOT)+"|$messageTimestamp|$content"))
     }
     fun parseFinancial(source: Source, text: String, receivedAt: Long, timestamp: Long, identity: String): Observation? {
+        if (text.isBlank() || text.length > 16384) return null
+        if (SbiObservedLayouts.informational(text)) return null
         if (Regex("(?i)\\bOTP\\b|one.time.password|verification code|\\bPIN\\b").containsMatchIn(text)) return null
+        if (Regex("(?i)\\boffer\\b|pre.approved|statement is ready|apply now|click.*(?:loan|offer)").containsMatchIn(text)) return null
         val parser = parsers.firstOrNull { it.canParse(text) }
-        if (parser == null && !Regex("(?i)transaction|debit|credit|mandate|withdrawal").containsMatchIn(text)) return null
-        if (Regex("(?i)offer|cashback offer|pre.approved|statement is ready").containsMatchIn(text)) return null
-        val kind = parser?.kind(text) ?: EventKind.UNKNOWN
-        val amount = Regex("(?i)(?:INR|Rs\\.?|₹)\\s*([\\d,]+(?:\\.\\d{1,2})?)").find(text)?.groupValues?.get(1)?.let { runCatching { Money.parse(it) }.getOrNull() }
-        val last4 = Regex("(?i)(?:a/c|acct?|account)(?:\\s*(?:no\\.?|number))?\\s*[:.\\-]?\\s*[Xx*•]*(\\d{4,18})").find(text)?.groupValues?.get(1)?.takeLast(4)
-        val reference = (Regex("(?i)(?:UTR|ref(?:erence)?(?:\\s*(?:no\\.?|number))?)\\s*[:#./-]?\\s*([A-Z0-9]{6,35})\\b")
-            .find(text)?.groupValues?.get(1)
-            ?: Regex("(?i)\\bUPI/(\\d{8,35})\\b").find(text)?.groupValues?.get(1))
-            ?.uppercase(Locale.ROOT).orEmpty()
-        val dateToken = Regex("\\b\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}\\b").find(text)?.value
-        val date = dateToken?.let { runCatching { Dates.parse(it) }.getOrNull() } ?: Dates.date(timestamp)
-        val timeToken = Regex("\\b(\\d{2}:\\d{2}(?::\\d{2})?)\\b").find(text)?.value
-        val actualTimestamp = timeToken?.let { runCatching { date.atTime(LocalTime.parse(it)).atZone(Dates.zone).toInstant().toEpochMilli() }.getOrNull() }
-            ?: if (dateToken == null) timestamp else null
+        if (parser == null && !Regex("(?i)transaction|debit|credit|mandate|withdrawal|refund|reversal").containsMatchIn(text)) return null
+        var kind = parser?.kind(text) ?: EventKind.UNKNOWN
+        val movement = kind !in listOf(EventKind.MANDATE_CREATED,EventKind.MANDATE_CANCELLED)
+        val fields = SmsFields.extract(text,timestamp,movement)
+        var warning = fields.warning
+        if(kind == EventKind.UNKNOWN && warning == null) warning = "Payment is pending, scheduled, or its financial state is not recognized."
+        if(kind in listOf(EventKind.DEBIT,EventKind.CREDIT) &&
+            Regex("(?i)\\bdebited\\b").containsMatchIn(text) && Regex("(?i)\\bcredited\\b").containsMatchIn(text)) {
+            warning = "Both debit and credit movements appear in this message."
+        }
+        if(warning != null) kind = EventKind.UNKNOWN
         val direction = when(kind) {
             EventKind.CREDIT,EventKind.REFUND,EventKind.REVERSAL -> Direction.CREDIT
             EventKind.DEBIT,EventKind.MANDATE_EXECUTED,EventKind.FAILED -> Direction.DEBIT
             else -> null
         }
-        val merchant = Regex("(?i)(?:paid to|paid at|\\bto\\b|\\bat\\b|received from)\\s+([\\w@.'& /-]+?)(?=\\s+(?:on|via|ref|UPI|from|using)\\b|[.;]|$)").find(text)?.groupValues?.get(1)?.trim().orEmpty()
-        return Observation(source,identity,receivedAt,actualTimestamp,date.toString(),last4,amount,direction,
-            merchant.ifBlank { "SBI transaction" },reference,detectChannel(text),kind,maskAccounts(text))
+        return Observation(source,identity,receivedAt,fields.timestamp,fields.date,fields.last4,fields.amount,direction,
+            fields.merchant,fields.reference,detectChannel(text),kind,maskAccounts(text),
+            parserVersion=VERSION,parseWarning=warning,balanceMinor=fields.balance)
     }
 }
 fun detectChannel(text: String): Channel = when {
+    Regex("(?i)deposit of cash").containsMatchIn(text) -> Channel.CASH
     Regex("(?i)\\bATM\\b|withdraw").containsMatchIn(text) -> Channel.ATM
-    Regex("(?i)\\bUPI\\b").containsMatchIn(text) -> Channel.UPI
+    Regex("(?i)\\bUPI\\b|\\(UPI\\s*Ref").containsMatchIn(text) || SbiObservedLayouts.isUpi(text) -> Channel.UPI
     Regex("(?i)\\bIMPS\\b").containsMatchIn(text) -> Channel.IMPS
     Regex("(?i)\\bNEFT\\b").containsMatchIn(text) -> Channel.NEFT
     Regex("(?i)\\bRTGS\\b").containsMatchIn(text) -> Channel.RTGS
