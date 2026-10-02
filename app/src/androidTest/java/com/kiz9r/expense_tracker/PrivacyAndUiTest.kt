@@ -33,6 +33,7 @@ class PrivacyAndUiTest {
         compose.onNodeWithTag("transactions.create").performClick()
         compose.onNodeWithTag("transactions.form.amount").performScrollTo().performTextInput("1249.50")
         compose.onNodeWithTag("transactions.form.merchant").performScrollTo().performTextInput("Synthetic Groceries")
+        compose.onNodeWithTag("transactions.form.optional").performScrollTo().performClick()
         compose.onNodeWithTag("transactions.form.notes").performScrollTo().performTextInput("UI regression")
         compose.onNodeWithTag("transactions.form.save").performScrollTo().performClick()
         compose.waitUntil(15000) {compose.onAllNodesWithTag("transactions.detail.merchant").fetchSemanticsNodes().isNotEmpty()}

@@ -27,11 +27,15 @@ import com.kiz9r.expense_tracker.data.*
     Screen("transactions.detail") {
         if(current==null) {Text("Loading transaction…");return@Screen}
         val tx=current.transaction
-        Heading(current.displayName,Money.format(tx.amountMinor)+" · "+tx.direction.name.lowercase())
+        Panel(current.displayName,tx.direction.name.lowercase(),"transactions.detail.summary") {
+            Text(Money.format(tx.amountMinor),style=MaterialTheme.typography.displaySmall,
+                color=if(tx.direction==Direction.DEBIT) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+        }
         Text(tx.date+" · "+current.accountName+" ••••"+current.accountLast4+" · "+tx.channel.name)
         Notice(if(tx.verification==Verification.VERIFIED) "Verified against an SBI statement." else "Detected or manually entered. Statement verification pending.")
         Text("Payment status: "+tx.outcome.name.lowercase().replace('_',' '))
         if(tx.reference.isNotBlank()) Text("Bank reference: "+tx.reference)
+        Heading("Personal details","Your edits stay intact when the bank verifies this transaction.")
         Field(name,{name=it},"Display merchant","transactions.detail.merchant")
         Choice("Category",category,listOf("" to "Other")+categories.map {it.id to it.name},"transactions.detail.category"){category=it}
         Field(notes,{notes=it},"Notes","transactions.detail.notes")
@@ -40,6 +44,7 @@ import com.kiz9r.expense_tracker.data.*
             modifier=Modifier.testTag("transactions.detail.save")){Text("Save personal details")}
         OutlinedButton(onClick={vm.action("Merchant rule created."){vm.ledger.rule(MerchantRuleEntity(
             matchType="exact",matchValue=tx.merchantOriginal,rename=name,categoryId=category.ifBlank{null}))}}){Text("Use these details for this merchant")}
+        Heading("Tracking preferences")
         Toggle("Hide from tracker",current.hidden,"transactions.detail.hide"){vm.action {vm.ledger.hide(id,it)}}
         Toggle("Transfer between my own accounts",tx.ownedTransfer,"transactions.detail.owned-transfer"){vm.action {vm.ledger.ownedTransfer(id,it)}}
         if(tx.manuallyCreated && tx.verification!=Verification.VERIFIED) {
@@ -56,7 +61,8 @@ import com.kiz9r.expense_tracker.data.*
         if(showEvidence) {
             Text("Original narration"); Text(tx.narration.ifBlank {tx.merchantOriginal})
             evidence.forEach { raw ->
-                HorizontalDivider();Text(raw.source.name.replace('_',' '),style=MaterialTheme.typography.titleSmall)
+                HorizontalDivider();Text("● "+raw.source.name.replace('_',' '),style=MaterialTheme.typography.titleSmall)
+                Text("Received "+Dates.date(raw.receivedAt),style=MaterialTheme.typography.labelSmall)
                 Text(raw.content);Text("Parser "+raw.parserVersion,style=MaterialTheme.typography.bodySmall)
             }
         }

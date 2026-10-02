@@ -12,10 +12,13 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kiz9r.expense_tracker.ui.features.*
 import com.kiz9r.expense_tracker.ui.theme.ExpensetrackerTheme
 import com.kiz9r.expense_tracker.ingestion.scheduleIngestion
+import com.kiz9r.expense_tracker.security.ScreenshotDebugPreference
+import com.kiz9r.expense_tracker.security.shouldProtectWindow
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -26,6 +29,7 @@ class MainActivity : FragmentActivity() {
     private var locked by mutableStateOf(true)
     private var lockEnabled = false
     private var authenticating = false
+    private var displaySettingsReady by mutableStateOf(false)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -34,19 +38,35 @@ class MainActivity : FragmentActivity() {
         setContent {
             if(startup!="ready") {
                 ExpensetrackerTheme {
-                    if(startup=="loading") androidx.compose.material3.Text("Opening your encrypted ledger…")
+                    if(startup=="loading") androidx.compose.material3.Surface(modifier=androidx.compose.ui.Modifier.fillMaxSize()) { Screen("startup") {Heading("SBI / PERSONAL","Opening your encrypted ledger…"); androidx.compose.material3.LinearProgressIndicator()} }
                     else RecoveryScreen(recovery,{checkLedger()}) { finishAffinity(); android.os.Process.killProcess(android.os.Process.myPid()) }
                 }
                 return@setContent
             }
+            val ready by model.ready.collectAsStateWithLifecycle()
+            LaunchedEffect(ready) {
+                if(ready) {
+                    try {
+                        if(ScreenshotDebugPreference(this@MainActivity).enableOnce(model.ledger))
+                            model.message.value="Screenshots are enabled for debugging. You can turn them off in Settings."
+                        displaySettingsReady=true
+                    } catch(e: kotlinx.coroutines.CancellationException) {throw e}
+                    catch(_: Exception) {model.message.value="Could not enable screenshots automatically. Enable them in Settings."}
+                }
+            }
             val settings by model.settings.collectAsStateWithLifecycle()
             lockEnabled = settings.any { it.key=="app_lock" && it.value=="true" }
             val screenshots = settings.firstOrNull { it.key=="screenshots" }?.value=="true"
+            val themeMode=settings.firstOrNull {it.key=="theme_mode"}?.value ?: "dark"
+            val light=themeMode=="light" || (themeMode=="system" && !androidx.compose.foundation.isSystemInDarkTheme())
             SideEffect {
-                if(screenshots) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                androidx.core.view.WindowCompat.getInsetsController(window,window.decorView).apply {
+                    isAppearanceLightStatusBars=light;isAppearanceLightNavigationBars=light
+                }
+                if(shouldProtectWindow(displaySettingsReady,screenshots,lockEnabled && locked)) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
-            ExpensetrackerTheme {
+            ExpensetrackerTheme(mode=settings.firstOrNull { it.key=="theme_mode" }?.value ?: "dark") {
                 TrackerApp(model)
                 if(lockEnabled && locked) LockDialog { authenticate() }
             }
@@ -54,6 +74,8 @@ class MainActivity : FragmentActivity() {
     }
     private fun checkLedger() {
         startup="loading"
+        displaySettingsReady=false
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         lifecycleScope.launch {
             try { recovery.checkAccessible(); startup="ready"; scheduleIngestion(this@MainActivity) }
             catch(e: kotlinx.coroutines.CancellationException) { throw e }

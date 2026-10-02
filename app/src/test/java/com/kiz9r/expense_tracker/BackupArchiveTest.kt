@@ -12,9 +12,9 @@ class BackupArchiveTest {
         return "{\"version\":2,\"createdAt\":1000,"+names.split(' ').joinToString(","){"\"$it\":[]"}+"}"
     }
     @Test fun legacyAndCurrentArchivesDecodeButMissingCollectionsAndInvalidVersionsDoNot() {
-        for(version in 1..2) assertEquals(version,BackupArchive.decode(emptyJson().replace("\"version\":2","\"version\":$version").toByteArray(),Gson()).version)
+        for(version in 1..3) assertEquals(version,BackupArchive.decode(emptyJson().replace("\"version\":2","\"version\":$version").toByteArray(),Gson()).version)
         val bad=listOf("{}",emptyJson().replace("\"accounts\":[]","\"accounts\":null"),
-            emptyJson().replace("\"version\":2","\"version\":3"),emptyJson().replace("\"version\":2","\"version\":1.5"),
+            emptyJson().replace("\"version\":2","\"version\":4"),emptyJson().replace("\"version\":2","\"version\":1.5"),
             emptyJson().replace("\"createdAt\":1000","\"createdAt\":9223372036854775808"),
             emptyJson().replace("\"createdAt\":1000","\"createdAt\":\"1000\""))
         bad.forEach {assertTrue(runCatching {BackupArchive.decode(it.toByteArray(),Gson())}.isFailure)}

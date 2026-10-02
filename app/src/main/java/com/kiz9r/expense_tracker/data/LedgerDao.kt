@@ -41,6 +41,15 @@ interface LedgerDao {
     @Query("SELECT * FROM transactions WHERE accountId=:accountId AND (reference=:reference AND :reference != '' OR date BETWEEN :start AND :end)") suspend fun candidates(accountId: String, reference: String, start: String, end: String): List<TransactionEntity>
     @Query(ITEM_QUERY + """WHERE (:accountId IS NULL OR t.accountId=:accountId)
       AND (:showHidden OR COALESCE(m.hidden,0)=0)
+      AND (NOT :eligible OR (COALESCE(m.hidden,0)=0 AND t.outcome!='FAILED' AND t.ownedTransfer=0))
+      AND (:merchant IS NULL OR COALESCE(NULLIF(m.merchantDisplay,''),t.merchantOriginal)=:merchant)
+      AND (:channel IS NULL OR t.channel=:channel)
+      AND (:categoryCount=0 OR COALESCE(m.categoryId,'') IN (:categoryKeys))
+      AND (:weekday='' OR strftime('%w',t.date)=:weekday)
+      AND (:metric='ALL' OR (:metric='DEBIT' AND t.direction='DEBIT')
+        OR (:metric='REFUNDS' AND t.direction='CREDIT' AND t.kind IN ('REFUND','REVERSAL'))
+        OR (:metric='INCOME' AND t.direction='CREDIT' AND t.kind NOT IN ('REFUND','REVERSAL'))
+        OR (:metric='NET' AND (t.direction='DEBIT' OR (t.direction='CREDIT' AND t.kind IN ('REFUND','REVERSAL')))))
       AND (:direction='' OR t.direction=:direction) AND (:verification='' OR t.verification=:verification)
       AND (:category IS NULL OR m.categoryId=:category) AND t.date BETWEEN :start AND :end
       AND t.amountMinor BETWEEN :minAmount AND :maxAmount
@@ -51,7 +60,8 @@ interface LedgerDao {
         OR EXISTS(SELECT 1 FROM transaction_tags tt JOIN tags g ON tt.tagId=g.id WHERE tt.transactionId=t.id AND g.name LIKE :query ESCAPE '\'))
       ORDER BY t.date DESC, COALESCE(t.timestamp,t.createdAt) DESC, t.id LIMIT :limit OFFSET :offset""")
     fun history(accountId: String?, showHidden: Boolean, query: String, direction: String, verification: String,
-        category: String?, start: String, end: String, minAmount: Long, maxAmount: Long, source: String, limit: Int, offset: Int): Flow<List<TransactionItem>>
+        category: String?, start: String, end: String, minAmount: Long, maxAmount: Long, source: String, limit: Int, offset: Int, eligible: Boolean = false, metric: String = "ALL", merchant: String? = null,
+        channel: String? = null, categoryKeys: List<String> = emptyList(), categoryCount: Int = 0, weekday: String = ""): Flow<List<TransactionItem>>
     @Query(ITEM_QUERY + "WHERE t.id=:id") fun detail(id: String): Flow<TransactionItem?>
     @Query("DELETE FROM transactions WHERE id=:id AND manuallyCreated=1 AND verification!='VERIFIED'") suspend fun deleteManual(id: String): Int
     @Query("SELECT COUNT(*) FROM refund_links WHERE originalId=:id OR refundId=:id") suspend fun refundConnections(id: String): Int

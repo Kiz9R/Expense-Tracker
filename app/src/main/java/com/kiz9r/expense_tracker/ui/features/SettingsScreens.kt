@@ -9,6 +9,9 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -45,12 +48,20 @@ import com.kiz9r.expense_tracker.domain.*
         if(!it) vm.message.value="SMS access was not granted. Manual tracking and statement imports still work."
     }
     Screen("settings") {
-        Heading("Settings","Private by default. Your financial data is stored in an encrypted database on this device.")
-        OutlinedButton(onClick={navigate("accounts")},modifier=Modifier.testTag("settings.accounts")){Text("Manage SBI accounts")}
-        OutlinedButton(onClick={navigate("review")},modifier=Modifier.testTag("settings.review")){Text("Needs review ("+reviews.size+")")}
-        OutlinedButton(onClick={navigate("mandates")}){Text("Mandates")}
-        OutlinedButton(onClick={navigate("rules")}){Text("Merchant rules")}
-        OutlinedButton(onClick={navigate("backup")}){Text("Encrypted backup & restore")}
+        Heading("Make it yours","Your ledger. Your preferences. Always private.")
+        Heading("Appearance")
+        Choice("Theme",settings.firstOrNull{it.key=="theme_mode"}?.value ?: "dark",
+            listOf("dark" to "Dark","light" to "Light","system" to "System"),"settings.appearance.theme") {mode->
+            vm.action { vm.ledger.setTheme(mode) }
+        }
+        Heading("Your workspace")
+        OutlinedButton(onClick={navigate("categories")},modifier=Modifier.fillMaxWidth().testTag("settings.categories")){Text("Categories")}
+        
+        OutlinedButton(onClick={navigate("accounts")},modifier=Modifier.fillMaxWidth().testTag("settings.accounts")){Text("Manage SBI accounts")}
+        OutlinedButton(onClick={navigate("review")},modifier=Modifier.fillMaxWidth().testTag("settings.review")){Text("Needs review ("+reviews.size+")")}
+        OutlinedButton(onClick={navigate("mandates")},modifier=Modifier.fillMaxWidth().testTag("settings.mandates")){Text("Mandates")}
+        OutlinedButton(onClick={navigate("rules")},modifier=Modifier.fillMaxWidth().testTag("settings.rules")){Text("Merchant rules")}
+        OutlinedButton(onClick={navigate("backup")},modifier=Modifier.fillMaxWidth().testTag("settings.backup")){Text("Encrypted backup & restore")}
         HorizontalDivider()
         Heading("Optional tracking")
         Text("SMS access detects new SBI financial messages. Other messages and OTPs are discarded. Past SMS history is never scanned.")
@@ -88,7 +99,7 @@ import com.kiz9r.expense_tracker.domain.*
         Text("No cloud sync, ads, bank login, payment initiation, or financial-data network access.",style=MaterialTheme.typography.bodySmall)
     }
 }
-@Composable fun CategoriesScreen(vm: TrackerViewModel) {
+@Composable fun CategoriesScreen(vm: TrackerViewModel,history: (String)->Unit = {}) {
     val categories by vm.categories.collectAsStateWithLifecycle()
     var name by rememberSaveable {mutableStateOf("")}
     var editId by rememberSaveable {mutableStateOf<String?>(null)}
@@ -100,14 +111,16 @@ import com.kiz9r.expense_tracker.domain.*
         if(editId!=null) TextButton(onClick={editId=null;name=""}){Text("Cancel")}
         categories.forEach { category ->
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text(category.name,Modifier.weight(1f))
+                TextButton(onClick={history(category.id)},modifier=Modifier.weight(1f).heightIn(min=48.dp).testTag("categories.items."+category.id+".history")) {
+                    Icon(Icons.Outlined.Label,null,Modifier.size(18.dp));Spacer(Modifier.width(12.dp));Text(category.name,Modifier.weight(1f))
+                }
                 if(!category.system) {
                     TextButton(onClick={editId=category.id;name=category.name}){Text("Rename")}
                     TextButton(onClick={vm.action("Category removed."){vm.ledger.deleteCategory(category.id)}}){Text("Delete")}
                 }
             }
         }
-        Notice("Only unused custom categories can be deleted. Filter the transaction list by category to see its history.")
+        Notice("Tap a category to see its history. Only unused custom categories can be deleted.")
     }
 }
 @Composable fun RulesScreen(vm: TrackerViewModel) {

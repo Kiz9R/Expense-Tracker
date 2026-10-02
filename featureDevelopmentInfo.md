@@ -2,7 +2,7 @@
 
 This is the single development reference for the SBI Expense Tracker. It consolidates the foundation and all seven former package documents. Read [requirements.md](requirements.md) for product requirements, [leftout.md](leftout.md) for current implementation and verification status, [VALIDATION.md](VALIDATION.md) for dated executed checks, and [rules.md](rules.md) for maintenance rules. Setup, installation and recovery instructions remain in [README.md](README.md).
 
-Last audited: 14 September 2026. This document describes existing code; it does not certify every requirement as complete. The approved plan keeps Android 11+, multiple SBI accounts, INR, English UI, PDF-first import and replacement restore. Notification ingestion is optional. The SBI Relationship Summary savings-account layout is validated against the supplied four-page encrypted sample; the earlier generic text-table parser remains experimental.
+Last audited: 17 September 2026. This document describes existing code; it does not certify every requirement as complete. The approved plan keeps Android 11+, multiple SBI accounts, INR, English UI, PDF-first import and replacement restore. Notification ingestion is optional. The SBI Relationship Summary savings-account layout is validated against the supplied four-page encrypted sample; the earlier generic text-table parser remains experimental.
 
 ## Table of contents
 
@@ -17,13 +17,15 @@ Last audited: 14 September 2026. This document describes existing code; it does 
 - [Matching and reconciliation](#matching-and-reconciliation)
 - [Security and permissions](#security-and-permissions)
 - [Encrypted backup and restore](#encrypted-backup-and-restore)
+- [Premium UI and reporting](#premium-ui-and-reporting)
 - [Analytics and merchant rules](#analytics-and-merchant-rules)
 - [Testing and release](#testing-and-release)
 - [Known limitations and extension boundaries](#known-limitations-and-extension-boundaries)
+- [Planned financial-manager expansion](#planned-financial-manager-expansion)
 
 ## Architecture and execution flow
 
-One Gradle app module separates domain, data, ingestion, reconciliation, security, backup and ui/features packages. Analytics currently lives in DAO aggregates, repository queries and dashboard UI; there is no separate analytics package.
+One Gradle app module separates domain, data, ingestion, reconciliation, security, backup and ui/features packages. The analytics package supplies transactional Room aggregates, typed reporting queries/results and a shared Home/Insights ViewModel.
 
 ExpenseApplication initializes Hilt. AppModule provides Gson and SQLCipher-backed Room. MainActivity hosts Compose and the biometric/device-credential gate. Background Android components obtain the same repositories through a Hilt entry point.
 
@@ -140,7 +142,7 @@ The schema intentionally separates status/metadata rather than reproducing every
 
 ## Screens and state management
 
-TrackerApp provides Dashboard, Transactions, Statements, Categories and Settings tabs. Secondary routes include transaction add/edit/detail, accounts, Needs Review, rules, mandates and backup. Search is embedded in Transactions; security controls are in Settings.
+TrackerApp provides Home, Transactions, Insights, Statements and Settings tabs. A shared top-level navigation helper pops to Home and opens the selected root with singleTop, without restoring nested tab stacks. Home always opens Home; system Back from any other top-level tab returns Home, and secondary routes return to their origin. Reporting preferences use AnalyticsViewModel SavedStateHandle; route filters survive saved-instance-state restoration. Categories is a secondary Settings route. Secondary routes include transaction add/edit/detail, accounts, Needs Review, rules, mandates and backup. Search is embedded in Transactions; security controls are in Settings.
 
 TrackerViewModel owns account/filter/month/grouping StateFlows, reactive repository subscriptions, busy/error state, statement preview/resolutions and backup preview. Startup waits for the first real account query before selecting onboarding, avoiding a returning user's form disappearing during initial load. Action errors reach a Snackbar; cancellation is preserved. The global progress indicator reserves its height so asynchronous writes do not move active controls.
 
@@ -156,7 +158,7 @@ Needs Review keeps unknown/ambiguous source observations out of canonical spendi
 
 Categories supports defaults and custom add/rename/delete when unused. Category history is available through transaction filtering. Rules supports exact/contains/prefix, priority, enablement and removal. Mandates displays authorization status separately from expenses.
 
-Important native controls use hierarchical Compose testTag semantics, not React ui-tag attributes. There are no role/access wrappers. Material 3 follows system light/dark/dynamic colors and font scaling; text labels communicate status without relying only on color. Physical TalkBack, large-font, contrast and touch-target checks remain pending.
+Important native controls use hierarchical Compose testTag semantics, not React ui-tag attributes. There are no role/access wrappers. Material 3 defaults to the graphite/emerald dark palette; Settings offers Dark, Light and System without wallpaper colors. Startup/recovery defaults to dark. Typography and layouts support font scaling; text labels communicate status without relying only on color. Physical TalkBack, large-font, contrast and touch-target checks remain pending.
 
 Nonsensitive form drafts use rememberSaveable where implemented. Passwords are kept in memory, never saved in instance state. Completed parse jobs survive process death; extraction requires file/password reentry if interrupted, and review choices resume from encrypted storage. If the regenerated preview token changes, old choices are cleared with an explanation.
 
@@ -226,7 +228,7 @@ No application INTERNET, READ_SMS, broad storage, contacts, location, camera, mi
 
 ## Encrypted backup and restore
 
-BackupSnapshot version 2 (restoring versions 1 and 2) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links and settings. Transient import jobs and device/signing keys are excluded.
+BackupSnapshot version 3 (restoring versions 1, 2 and 3) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links and settings. Transient import jobs and device/signing keys are excluded.
 
 BackupCrypto format ETBACK01 uses magic/header bytes, PBKDF2-HMAC-SHA256 with 600,000 iterations, fresh 16-byte salt, fresh 12-byte nonce and AES-256-GCM. The complete header is authenticated as AAD. Exports require a password of at least 12 characters. The derived key is independent of Android Keystore, permitting portable recovery.
 
@@ -234,13 +236,31 @@ BackupService snapshots Room transactionally, serializes with Gson in process me
 
 Statement warning JSON and review-decision revisions are included in backups. Old archives without warning JSON remain readable; warnings can be reconstructed from official rows. Validation also checks statement dates, sequence, linked financial facts and decision targets.
 
-[BackupArchive.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupArchive.kt) authenticates the entire file before parsing without needing a database or device key. It requires every collection and non-null field, checks primitive types and exact integer ranges before Gson conversion, and supports archive versions 1/2. BackupValidation plus [BackupRelations.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupRelations.kt) check IDs, accounts, enums, money/dates, ownership, evidence/source/observation consistency, statement assignment and reconciliation status, decision origins, mandate status, rule syntax, allowed settings and refund bounds. Unreadable pre-existing observation JSON may be preserved only as an unattached quarantined review record. OTP/PIN content is rejected. Historical statement balance exceptions remain valid archive data.
+[BackupArchive.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupArchive.kt) authenticates the entire file before parsing without needing a database or device key. It requires every collection and non-null field, checks primitive types and exact integer ranges before Gson conversion, and supports archive versions 1/2/3. Theme preference is an allowlisted dark/light/system value; missing legacy preferences render dark. Older APKs reject version-3 archives. BackupValidation plus [BackupRelations.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupRelations.kt) check IDs, accounts, enums, money/dates, ownership, evidence/source/observation consistency, statement assignment and reconciliation status, decision origins, mandate status, rule syntax, allowed settings and refund bounds. Unreadable pre-existing observation JSON may be preserved only as an unattached quarantined review record. OTP/PIN content is rejected. Historical statement balance exceptions remain valid archive data.
 
 Restore is available directly from onboarding without creating a placeholder account, as well as Settings. Preview shows date, masked account names and record counts before explicit replacement confirmation. Changing the selected file, leaving the screen or cancelling clears the preview; an epoch check prevents a late inspection result from reviving a cancelled preview. Passwords rejected while another action is busy are cleared too.
 
 Restore revalidates, discards transient jobs and replaces all records inside one Room transaction. SMS and notification opt-in checks occur inside their observation-write transactions, so a pre-restore notification callback cannot bypass the restored disabled setting. Other writers serialize behind it; cancellation is checked before replacement and before commit. SQL write failure or coroutine cancellation rolls back records and transient drafts together; already-queued ingestion re-reads current rows instead of resurrecting deleted data. SMS/notification settings are disabled after restore because OS grants are device-specific. If no device screen lock exists, an imported app-lock preference is disabled with a notice to review security settings.
 
 There is no merge restore or saved backup password. Device keys are never imported. APK signing material must be retained separately from financial backups.
+
+## Premium UI and reporting
+
+The v1.4 design uses graphite #0D1114, charcoal surfaces, emerald actions, rose debits and blue refunds, native typography with tabular financial figures, rounded surfaces and bundled icons. Theme.kt and Type.kt define the system. Shared Components.kt gives every existing form, confirmation, lock, backup and recovery screen the same controls, spacing and palette. MainActivity updates status/navigation icon contrast with the selected theme. No network asset or chart library is used.
+
+Home and Insights use [InsightsScreen.kt](app/src/main/java/com/kiz9r/expense_tracker/ui/features/InsightsScreen.kt) with reusable Compose Canvas controls in [AnalyticsCharts.kt](app/src/main/java/com/kiz9r/expense_tracker/ui/features/AnalyticsCharts.kt). Home has Net spent (debits minus refunds), Net gained (ordinary credits), Net total (gained minus spent), separate refunds, comparison, trend, categories, recent five and entry/import/review actions. Insights adds debit/refund and income/expense bars, signed merchant/channel bars, weekday totals, averages, largest expenses and recurring suggestions. The category donut uses positive gross debits, top five plus Other categories. Its selection stores the exact category IDs, including the uncategorized empty key. Merchant charts display the top 20 by absolute net spending and explicitly label this bound.
+
+[AnalyticsModels.kt](app/src/main/java/com/kiz9r/expense_tracker/analytics/AnalyticsModels.kt) defines AnalyticsQuery, totals, daily/group/report models, zero filling and date buckets. Reports support this/last month, 3/6/12 calendar months and custom ranges capped at ten years. Current presets and custom end dates stop at today. The comparison immediately precedes the selected interval and has exactly the same number of days. Days are zero-filled only inside the elapsed range; daily bars use seven-day buckets after 45 days and calendar months after 180 days.
+
+[AnalyticsDao.kt](app/src/main/java/com/kiz9r/expense_tracker/analytics/AnalyticsDao.kt) aggregates canonical transactions with metadata only, excluding hidden/failed/owned-transfer records. It never joins evidence into sums. Net spending is debit spending minus posted refund/reversal credits; ordinary income excludes those credits. [AnalyticsRepository.kt](app/src/main/java/com/kiz9r/expense_tracker/analytics/AnalyticsRepository.kt) reacts to Room invalidation and reads all sections inside one transaction on IO. [AnalyticsViewModel.kt](app/src/main/java/com/kiz9r/expense_tracker/analytics/AnalyticsViewModel.kt) shares reporting scope across Home/Insights; history filters are independent. TrackerViewModel supplies its factory so test and production ledgers remain correctly scoped. Loading and failed reads have explicit UI states; account deletion clears an invalid reporting selection.
+
+HistoryFilter/DAO support exact merchant, channel, category-key sets, weekday, financial eligibility and ALL/NET/DEBIT/REFUNDS/INCOME selection, in addition to existing filters. Chart, summary and category actions open a dedicated history/{selection} route with an encoded filter and route-local saved state. They never replace the main Transactions filter. Main history starts with both directions, preserves deliberate filters in TrackerViewModel SavedStateHandle, lists active criteria with Clear filters, prepopulates range fields and distinguishes loading/errors/empty results. Chart and summary actions construct exact filters rather than approximating with text search. Cumulative chart links cover the selected start through the selected point; comparison links use the corresponding preceding dates. Gross and net signs remain explicit. Legends, date sliders and accessible data-list dialogs provide alternatives to chart gestures.
+
+History uses a LazyColumn and a bounded 150-row SQL window, advancing by 50 rows near its end while stable transaction IDs preserve the overlapping scroll anchor. A control loads earlier windows. Search persists across tabs; filters move to a sheet. Date headers and icon/status text replace the old page layout. Forms put amount first, use native date/time selection and disclose optional notes/tags. Details separate amount/status, personal metadata, tracking actions and source evidence. Categories link to exact history. Statement screens retain their bounded review pages, persisted decisions and summaries with a staged import header.
+
+The existing settings table stores theme_mode, so Room remains schema 2. Backups export version 3, accept versions 1–3, preserve explicit themes and default missing legacy themes to dark. No device-specific key or SMS permission behavior changes.
+
+Verification is tracked in leftout.md and the dated VALIDATION.md entry. AnalyticsTest checks leap/comparison/preset/bucket boundaries and signed values. AnalyticsIntegrationTest checks exclusions, multiple evidence, exact drilldowns, theme/legacy replacement and 20,000 transactions over five years. RedesignUiTest checks navigation/search preservation and can capture synthetic dark/light/large-font screens with the v14_visual instrumentation argument. Physical-phone/TalkBack and Android 11 behavior still require separate evidence.
 
 ## Analytics and merchant rules
 
@@ -287,6 +307,22 @@ Release signing loads private, gitignored signing.properties and personal-releas
 - Account rename/type editing/deactivation, refund selection by merchant/date instead of local ID, multi-year performance and backup memory behavior need further work or validation.
 - Android 11/physical biometrics, permission denial/revocation, reboot/background restrictions, TalkBack/large fonts, physical recovery and phone uninstall/reinstall/update paths remain unverified.
 - Migration 1 to 2 has an encrypted integration test; future migrations also need tests when the schema changes. Current lint warnings remain recorded; passing builds are not release readiness.
-- Cloud, other banks/cards/currencies, family profiles, budgets and advanced recurring analysis are future scope. Payments, credential/OTP collection, bank-login scraping and screen monitoring are intentionally excluded.
+- Cloud, other banks/cards/currencies, family profiles and advanced analysis beyond the defined roadmap remain future scope. Budgets, local payment planning, balances and forecasts are now planned under requirements sections 74–82; they are not implemented by this documentation update. Payment execution, credential/OTP collection, bank-login scraping and screen monitoring remain intentionally excluded.
 
 Maintain this root document and leftout.md together whenever implementation or verification changes. Do not recreate package-level development documents.
+
+## v1.4.1 debugging update
+
+ScreenshotDebugPreference enables the existing screenshots setting once after successful initialization. Its screenshots_enabled_v141 acknowledgement lives in installation-local debug_display_preferences, outside financial backups; a mutex serializes initialization. Database write precedes a checked durable preference commit. Later user changes and restored screenshot preferences are respected. MainActivity keeps FLAG_SECURE during startup/recovery, while locked and while the preference is unavailable; unlocked ordinary screens/dialogs allow capture when enabled. A one-time snackbar explains the setting. No schema or archive version change is introduced.
+
+NavigationFixTest covers the two ₹1 movements, independent summary/category history, tab-root navigation, system Back, visible range filters and saved drilldown restoration. AnalyticsIntegrationTest adds ordinary-credit/refund/negative-total and one-time screenshot upgrade tests. DisplayPolicyTest covers protected states and human-readable filters. ScreenshotWindowTest verifies the real activity flag, capture and disabled preference across recreation. Build/test and signed update results will be recorded in VALIDATION.md after execution.
+
+## Planned financial-manager expansion
+
+Documentation scope updated **2 October 2026**; the implementation audit date above is unchanged. [Requirements sections 74–82](requirements.md#74-financial-manager-expansion-scope) define the expansion and FM01–FM12 acceptance scenarios. [leftout.md](leftout.md) tracks it under F063–F069. This section describes future design constraints, not existing code or executed tests.
+
+Build on the existing canonical ledger and repositories: add category hierarchy/split allocations, dated balance checkpoints and paired transfers first; monthly budget periods/rollover second; payment schedules, occurrences and actual-settlement links third; forecasts and projected-shortfall alerts fourth. Keep planning records distinct from actual transactions. Split allocations must sum exactly to the canonical amount. Budget periods retain original allocations/rules while late financial facts recalculate dependent rollover deterministically.
+
+Balance calculations include hidden posted movements and owned transfers, unlike spending analytics. Expose bank-reported, calculated and projected figures with source/time/completeness. A checkpoint must not count its included movements again. Plans affect forecasts until settled by actual transactions; partial settlements reduce only the unpaid remainder. Forecast everyday spending excludes commitments already represented in schedules. Reminders never execute payments.
+
+Planned Home/Plan/Insights flows will expose these differences and preserve current reconciliation/history access. New records require explicit, non-destructive Room migrations, validated backup relationships, older-archive defaults and a versioned archive extension. No new schema, backup version, dependencies, packages or runtime behavior were introduced here. Complete outstanding v1.4.1 verification before expansion delivery; future implementation must supply FM01–FM12 evidence and retain existing acceptance coverage.

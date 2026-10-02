@@ -1,6 +1,12 @@
 package com.kiz9r.expense_tracker.ui.features
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -14,6 +20,8 @@ import com.kiz9r.expense_tracker.data.*
 import com.kiz9r.expense_tracker.domain.*
 import java.time.LocalTime
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.catch
 
 @Composable fun AccountScreen(vm: TrackerViewModel, onboarding: Boolean, done: ()->Unit) {
     var restoring by rememberSaveable { mutableStateOf(false) }
@@ -59,77 +67,57 @@ import kotlinx.coroutines.flow.flowOf
     }
 }
 
-@Composable fun AccountFilter(vm: TrackerViewModel, tag: String) {
+@Composable fun AccountFilter(vm: TrackerViewModel, tag: String, selection: HistoryFilter? = null, change: ((HistoryFilter)->Unit)? = null) {
     val accounts by vm.accounts.collectAsStateWithLifecycle()
-    val filter by vm.filter.collectAsStateWithLifecycle()
+    val mainFilter by vm.filter.collectAsStateWithLifecycle()
+    val filter=selection ?: mainFilter
+    fun update(value: HistoryFilter) {if(change!=null) change(value) else vm.filter.value=value}
     Choice("Account",filter.accountId.orEmpty(),listOf("" to "All accounts")+accounts.map {it.id to (it.nickname+" ••••"+it.last4)},tag) {
-        vm.filter.value=filter.copy(accountId=it.ifBlank {null},page=0)
+        update(filter.copy(accountId=it.ifBlank {null},page=0))
     }
 }
-@Composable fun DashboardScreen(vm: TrackerViewModel, open: (String)->Unit) {
-    val month by vm.month.collectAsStateWithLifecycle()
-    val totals by vm.totals.collectAsStateWithLifecycle()
-    val previous by vm.previousTotals.collectAsStateWithLifecycle()
-    val breakdown by vm.breakdown.collectAsStateWithLifecycle()
-    val grouping by vm.grouping.collectAsStateWithLifecycle()
-    val largest by vm.largest.collectAsStateWithLifecycle()
-    val recurring by vm.recurring.collectAsStateWithLifecycle()
-    val filter by vm.filter.collectAsStateWithLifecycle()
-    val recent by remember(filter.accountId) { vm.ledger.history(HistoryFilter(accountId=filter.accountId)) }.collectAsStateWithLifecycle(emptyList())
-    Screen("dashboard") {
-        Heading("Your month, at a glance","Detected transactions are included until your statement verifies them.")
-        AccountFilter(vm,"dashboard.filters.account")
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-            TextButton(onClick={vm.month.value=month.minusMonths(1)},modifier=Modifier.testTag("dashboard.month.previous")){Text("Previous")}
-            Text(month.toString(),style=MaterialTheme.typography.titleLarge)
-            TextButton(onClick={vm.month.value=month.plusMonths(1)},modifier=Modifier.testTag("dashboard.month.next")){Text("Next")}
-        }
-        Card(Modifier.fillMaxWidth().testTag("dashboard.summary")) {
-            Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                Text("Net spending",style=MaterialTheme.typography.labelLarge)
-                Text(Money.format(totals.netSpend),style=MaterialTheme.typography.headlineLarge)
-                Text("Income "+Money.format(totals.income)+"  ·  Net cash flow "+Money.format(totals.net))
-                Text("Refunds & reversals "+Money.format(totals.refunds))
-                Text(totals.count.toString()+" transactions · Previous month spent "+Money.format(previous.netSpend),style=MaterialTheme.typography.bodySmall)
-            }
-        }
-        Heading("Spending breakdown")
-        Choice("Group by",grouping,listOf("category" to "Category","merchant" to "Merchant","day" to "Day"),"dashboard.group"){vm.grouping.value=it}
-        if(breakdown.isEmpty()) Text("Add your first transaction to see spending insights.")
-        breakdown.take(31).forEach { row ->
-            Row(Modifier.fillMaxWidth()) { Text(row.label,Modifier.weight(1f));Text(Money.format(row.amount)) }
-            LinearProgressIndicator(progress={ if(totals.spend>0) (row.amount.toFloat()/totals.spend).coerceIn(0f,1f) else 0f },modifier=Modifier.fillMaxWidth())
-        }
-        Heading("Recent transactions")
-        recent.take(5).forEach { TransactionCard(it){open(it.transaction.id)} }
-        if(largest.isNotEmpty()) Heading("Largest expenses")
-        largest.forEach { TransactionCard(it){open(it.transaction.id)} }
-        if(recurring.isNotEmpty()) {
-            Heading("Possible recurring payments","Same merchant and amount in at least three months. Suggestions only.")
-            recurring.forEach { Text(it.label+" · "+Money.format(it.amount)) }
-        }
-        Spacer(Modifier.height(64.dp))
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable fun TransactionsScreen(vm: TrackerViewModel, selection: HistoryFilter? = null, change: ((HistoryFilter)->Unit)? = null, open: (String)->Unit) {
+    val mainFilter by vm.filter.collectAsStateWithLifecycle()
+    val filter=selection ?: mainFilter
+    fun update(value: HistoryFilter) {if(change!=null) change(value) else vm.filter.value=value}
+    val loaded=key(filter) {
+        remember(filter) {vm.ledger.history(filter.copy(limit=150)).map {HistoryLoad(it)}
+            .catch {emit(HistoryLoad(error="Could not load transactions. Change or clear filters to retry."))}}
+            .collectAsStateWithLifecycle(HistoryLoad()).value
     }
-}
-@Composable fun TransactionsScreen(vm: TrackerViewModel, open: (String)->Unit) {
-    val filter by vm.filter.collectAsStateWithLifecycle()
-    val transactions by vm.transactions.collectAsStateWithLifecycle()
+    val transactions=loaded.rows.orEmpty()
+    val scroll=rememberLazyListState()
+    var shifting by remember {mutableStateOf(false)}
+    val base=filter.copy(page=0)
+    LaunchedEffect(base) {scroll.scrollToItem(0)}
+    LaunchedEffect(transactions) {shifting=false}
+    val nearEnd by remember {derivedStateOf {scroll.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0}}
+    LaunchedEffect(nearEnd,transactions) {
+        if(!shifting && transactions.size==150 && nearEnd>=140) {shifting=true;update(filter.copy(page=filter.page+1))}
+    }
     val categories by vm.categories.collectAsStateWithLifecycle()
     var expanded by rememberSaveable {mutableStateOf(false)}
-    var minimum by rememberSaveable {mutableStateOf("")}
-    var maximum by rememberSaveable {mutableStateOf("")}
-    var start by rememberSaveable {mutableStateOf("")}
-    var end by rememberSaveable {mutableStateOf("")}
-    Screen("transactions") {
-        Heading("Transactions")
-        Field(filter.query,{vm.filter.value=filter.copy(query=it,page=0)},"Search merchant, notes, tags, amount, reference","transactions.search")
-        AccountFilter(vm,"transactions.filters.account")
-        TextButton(onClick={expanded=!expanded}){Text(if(expanded) "Close filters" else "More filters")}
-        if(expanded) {
-            Choice("Direction",filter.direction,listOf("" to "All","DEBIT" to "Expenses","CREDIT" to "Credits"),"transactions.filters.direction"){vm.filter.value=filter.copy(direction=it,page=0)}
-            Choice("Verification",filter.verification,listOf("" to "All")+Verification.entries.map {it.name to it.name.lowercase().replace('_',' ')},"transactions.filters.verification"){vm.filter.value=filter.copy(verification=it,page=0)}
-            Choice("Category",filter.category.orEmpty(),listOf("" to "All")+categories.map {it.id to it.name},"transactions.filters.category"){vm.filter.value=filter.copy(category=it.ifBlank{null},page=0)}
-            Choice("Source",filter.source,listOf("" to "All")+Source.entries.map {it.name to it.name.replace('_',' ')},"transactions.filters.source"){vm.filter.value=filter.copy(source=it,page=0)}
+    var minimum by rememberSaveable(filter.minAmount) {mutableStateOf(if(filter.minAmount==0L) "" else Money.input(filter.minAmount))}
+    var maximum by rememberSaveable(filter.maxAmount) {mutableStateOf(if(filter.maxAmount==Long.MAX_VALUE) "" else Money.input(filter.maxAmount))}
+    var start by rememberSaveable(filter.start) {mutableStateOf(if(filter.start=="1900-01-01") "" else filter.start)}
+    var end by rememberSaveable(filter.end) {mutableStateOf(if(filter.end=="2999-12-31") "" else filter.end)}
+    Column(Modifier.fillMaxSize().testTag("transactions").padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        Field(filter.query,{update(filter.copy(query=it,page=0))},"Search transactions","transactions.search")
+        AccountFilter(vm,"transactions.filters.account",filter,::update)
+        if(filter.copy(page=0,limit=50)!=HistoryFilter()) {
+            Text(historyFilterSummary(filter,categories),modifier=Modifier.testTag("transactions.filters.summary"),style=MaterialTheme.typography.bodySmall)
+            TextButton(onClick={update(HistoryFilter())},modifier=Modifier.testTag("transactions.filters.clear")){Text("Clear filters")}
+        }
+        TextButton(onClick={expanded=true},modifier=Modifier.testTag("transactions.filters.open")){Text("Filters"+if(filter.eligible) " · Insights selection" else "")}
+        if(expanded) ModalBottomSheet(onDismissRequest={expanded=false}) {
+          Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Heading("Refine your history")
+            if(filter.eligible) Notice("Exact Insights selection: "+filter.metric.lowercase()+" · "+filter.start+" to "+filter.end+". Reset filters to leave this selection.")
+            Choice("Direction",filter.direction,listOf("" to "All","DEBIT" to "Expenses","CREDIT" to "Credits"),"transactions.filters.direction"){update(filter.copy(direction=it,page=0))}
+            Choice("Verification",filter.verification,listOf("" to "All")+Verification.entries.map {it.name to it.name.lowercase().replace('_',' ')},"transactions.filters.verification"){update(filter.copy(verification=it,page=0))}
+            Choice("Category",filter.category.orEmpty(),listOf("" to "All")+categories.map {it.id to it.name},"transactions.filters.category"){update(filter.copy(category=it.ifBlank{null},page=0))}
+            Choice("Source",filter.source,listOf("" to "All")+Source.entries.map {it.name to it.name.replace('_',' ')},"transactions.filters.source"){update(filter.copy(source=it,page=0))}
             Field(start,{start=it},"From date (YYYY-MM-DD)","transactions.filters.start")
             Field(end,{end=it},"To date (YYYY-MM-DD)","transactions.filters.end")
             Field(minimum,{minimum=it},"Minimum amount","transactions.filters.minimum",numeric=true)
@@ -141,20 +129,32 @@ import kotlinx.coroutines.flow.flowOf
                     val min=if(minimum.isBlank()) 0 else Money.parse(minimum)
                     val max=if(maximum.isBlank()) Long.MAX_VALUE else Money.parse(maximum)
                     require(from<=to && min<=max) { "Invalid date or amount range." }
-                    vm.filter.value=filter.copy(start=from,end=to,minAmount=min,maxAmount=max,page=0)
+                    update(filter.copy(start=from,end=to,minAmount=min,maxAmount=max,page=0));expanded=false
                 }.onFailure {vm.message.value=it.message}
             }){Text("Apply range")}
-            Toggle("Include hidden transactions",filter.showHidden,"transactions.filters.hidden"){vm.filter.value=filter.copy(showHidden=it,page=0)}
-            TextButton(onClick={vm.filter.value=HistoryFilter();start="";end="";minimum="";maximum=""}){Text("Reset filters")}
+            Toggle("Include hidden transactions",filter.showHidden,"transactions.filters.hidden"){update(filter.copy(showHidden=it,page=0))}
+            TextButton(onClick={update(HistoryFilter());start="";end="";minimum="";maximum="";expanded=false}){Text("Reset filters")}
+          }
         }
-        if(transactions.isEmpty()) Notice("No transactions match this view. Add a transaction or import an SBI statement.")
-        transactions.forEach { TransactionCard(it){open(it.transaction.id)} }
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-            TextButton(onClick={vm.filter.value=filter.copy(page=filter.page-1)},enabled=filter.page>0){Text("Previous page")}
-            Text("Page "+(filter.page+1))
-            TextButton(onClick={vm.filter.value=filter.copy(page=filter.page+1)},enabled=transactions.size==50){Text("Next page")}
+        if(loaded.error!=null) Notice(loaded.error,true)
+        else if(loaded.rows==null) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("transactions.loading"))
+        else if(transactions.isEmpty()) Notice("No transactions match this view. Clear filters, add a transaction or import an SBI statement.")
+        LazyColumn(state=scroll,modifier=Modifier.weight(1f),contentPadding=PaddingValues(bottom=88.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            item(key="history-start") {
+                if(filter.page>0) TextButton(onClick={update(filter.copy(page=(filter.page-2).coerceAtLeast(0)))}){Text("Load earlier in this list")}
+            }
+            itemsIndexed(transactions,key={_,it->it.transaction.id}) {i,item->
+                val date=item.transaction.date
+                Column {
+                    if(i==0 || transactions[i-1].transaction.date!=date) Text(
+                        when(date) {Dates.today().toString()->"Today";Dates.today().minusDays(1).toString()->"Yesterday";else->date},
+                        style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=16.dp,bottom=8.dp))
+                    TransactionCard(item){open(item.transaction.id)}
+                }
+            }
+            item {if(transactions.size==150) Text("More activity loads as you scroll",style=MaterialTheme.typography.bodySmall)
+                else if(transactions.isNotEmpty()) Text("You’re all caught up.",modifier=Modifier.padding(16.dp),style=MaterialTheme.typography.bodySmall)}
         }
-        Spacer(Modifier.height(64.dp))
     }
 }
 @Composable fun TransactionForm(vm: TrackerViewModel, id: String?, done: (String)->Unit) {
@@ -173,6 +173,9 @@ import kotlinx.coroutines.flow.flowOf
     var notes by rememberSaveable {mutableStateOf("")}
     var tags by rememberSaveable {mutableStateOf("")}
     var loaded by rememberSaveable {mutableStateOf(false)}
+    var optional by rememberSaveable {mutableStateOf(id!=null)}
+    val context=LocalContext.current
+    val pickerStyle=if(MaterialTheme.colorScheme.background.luminance()<.5f) android.R.style.Theme_DeviceDefault_Dialog else android.R.style.Theme_DeviceDefault_Light_Dialog
     LaunchedEffect(existing,existingTags) {
         val item=existing
         if(item!=null && !loaded) {
@@ -180,20 +183,25 @@ import kotlinx.coroutines.flow.flowOf
             time=tx.timestamp?.let {java.time.Instant.ofEpochMilli(it).atZone(Dates.zone).toLocalTime().withSecond(0).withNano(0).toString()} ?: "12:00"
             merchant=item.displayName;category=item.categoryId.orEmpty();notes=item.notes
             tags=existingTags.joinToString(", ") {it.name}
-            if(existingTags.isNotEmpty()) loaded=true
+            loaded=true
         }
     }
     Screen("transactions.form") {
         Heading(if(id==null) "Add transaction" else "Edit manual transaction")
-        Choice("Account",account,accounts.map {it.id to (it.nickname+" ••••"+it.last4)},"transactions.form.account"){account=it}
         Field(amount,{amount=it},"Amount (INR)","transactions.form.amount",numeric=true)
         Choice("Direction",direction,listOf("DEBIT" to "Expense","CREDIT" to "Income"),"transactions.form.direction"){direction=it}
-        Field(date,{date=it},"Date (YYYY-MM-DD)","transactions.form.date")
-        Field(time,{time=it},"Time (HH:MM, India time)","transactions.form.time")
+        Choice("Account",account,accounts.map {it.id to (it.nickname+" ••••"+it.last4)},"transactions.form.account"){account=it}
+        DateControl(date,{date=it},"Date","transactions.form.date")
+        OutlinedButton(onClick={ val parsed=LocalTime.parse(time)
+            android.app.TimePickerDialog(android.view.ContextThemeWrapper(context,pickerStyle),{_,h,m->time=LocalTime.of(h,m).toString()},parsed.hour,parsed.minute,true).show()
+        },modifier=Modifier.fillMaxWidth().testTag("transactions.form.time")){Text("Time · "+time+" · India")}
         Field(merchant,{merchant=it},"Merchant or description","transactions.form.merchant")
         Choice("Category",category,listOf("" to "Other")+categories.map {it.id to it.name},"transactions.form.category"){category=it}
-        Field(notes,{notes=it},"Notes","transactions.form.notes")
-        Field(tags,{tags=it},"Tags (comma separated)","transactions.form.tags")
+        TextButton(onClick={optional=!optional},modifier=Modifier.testTag("transactions.form.optional")){Text(if(optional) "Hide optional details" else "Add notes & tags")}
+        if(optional) {
+            Field(notes,{notes=it},"Notes","transactions.form.notes")
+            Field(tags,{tags=it},"Tags (comma separated)","transactions.form.tags")
+        }
         Button(onClick={vm.save(ManualInput(id,account,amount,Direction.valueOf(direction),date,time,merchant,category.ifBlank{null},notes,tags),done)},
             enabled=!busy,modifier=Modifier.fillMaxWidth().testTag("transactions.form.save")){Text("Save transaction")}
     }

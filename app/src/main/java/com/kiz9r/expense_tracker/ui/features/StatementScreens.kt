@@ -59,7 +59,13 @@ private fun candidateLabel(candidate: MatchCandidate): String {
     LaunchedEffect(preview?.fileHash) { page=0 }
     Screen("statements") {
         Heading("SBI statements","Verify detected transactions and recover missed activity from your statement.")
-        Notice("Supports the SBI Relationship Summary savings-account layout and the documented text-table layout. Other layouts are rejected. Review the account and totals before committing.")
+        Surface(color=MaterialTheme.colorScheme.surfaceContainerHigh,shape=MaterialTheme.shapes.medium) {
+            Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text(if(preview!=null) "02 / REVIEW & RECONCILE" else if(importing) "01 / READING YOUR STATEMENT" else "01 / CHOOSE A STATEMENT",style=MaterialTheme.typography.labelLarge,color=MaterialTheme.colorScheme.primary)
+                Text("Select PDF  →  Review matches  →  Verify",style=MaterialTheme.typography.bodyMedium)
+                Text("SBI Relationship Summary supported. Text-table layouts are experimental. Confirm the account and totals before saving.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         if(preview==null && !importing) {
             Choice("Account",account,accounts.map {it.id to (it.nickname+" ••••"+it.last4)},"statements.account"){account=it}
             OutlinedButton(onClick={picker.launch(arrayOf("application/pdf"))},enabled=!busy,modifier=Modifier.testTag("statements.select")){

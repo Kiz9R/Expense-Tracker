@@ -9,6 +9,7 @@ import androidx.room.RoomDatabase
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun ledger(): LedgerDao
     abstract fun backup(): BackupDao
+    abstract fun analytics(): com.kiz9r.expense_tracker.analytics.AnalyticsDao
 }
 /** Preserve financial records and unfinished parsing jobs from the first release. */
 val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {

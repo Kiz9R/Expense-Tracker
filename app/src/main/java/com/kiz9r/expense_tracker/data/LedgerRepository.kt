@@ -11,7 +11,9 @@ import javax.inject.Singleton
 data class HistoryFilter(val accountId: String? = null, val query: String = "", val showHidden: Boolean = false,
     val direction: String = "", val verification: String = "", val category: String? = null,
     val start: String = "1900-01-01", val end: String = "2999-12-31", val minAmount: Long = 0,
-    val maxAmount: Long = Long.MAX_VALUE, val source: String = "", val page: Int = 0)
+    val maxAmount: Long = Long.MAX_VALUE, val source: String = "", val page: Int = 0,
+    val eligible: Boolean = false, val metric: String = "ALL", val merchant: String? = null,
+    val channel: String? = null, val categoryKeys: List<String> = emptyList(), val weekday: String = "", val limit: Int = 50)
 data class ManualInput(val id: String? = null, val accountId: String, val amount: String, val direction: Direction,
     val date: String, val time: String, val merchant: String, val categoryId: String?, val notes: String, val tags: String)
 
@@ -57,8 +59,9 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
         val query = if (f.query.isBlank()) "" else "%" + (runCatching { Money.parse(f.query).toString() }.getOrNull()
             ?: f.query.trim()).replace("\\","\\\\").replace("%","\\%").replace("_","\\_") + "%"
         return dao.history(f.accountId,f.showHidden,query,f.direction,f.verification,f.category,f.start,f.end,
-            f.minAmount,f.maxAmount,f.source,50,f.page * 50)
+            f.minAmount,f.maxAmount,f.source,f.limit,f.page * 50,f.eligible,f.metric,f.merchant,f.channel,f.categoryKeys,f.categoryKeys.size,f.weekday)
     }
+    suspend fun setTheme(mode: String) { require(mode in listOf("dark","light","system")); dao.saveSetting(SettingEntity("theme_mode",mode)) }
     fun detail(id: String) = dao.detail(id)
     fun evidence(id: String) = dao.evidenceEvents(id)
     fun tags(id: String) = dao.tags(id)

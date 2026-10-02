@@ -2,12 +2,46 @@
 
 A native Android personal expense ledger built with Kotlin, Compose, Room/SQLCipher, Hilt and WorkManager. All normal operation is offline. There is no payment initiation, banking login, analytics SDK or application network permission.
 
+The planned next direction is a **personal financial manager**, extending the existing ledger with budgets, balances and payment planning. The app name and currently shipped capabilities remain unchanged. See the roadmap below and [requirements sections 74–82](requirements.md#74-financial-manager-expansion-scope) for the planned behavior.
+
+## Planned financial-manager expansion
+
+Agreed direction, **2 October 2026**. The capabilities in this section are planned, not available-feature or release-validation claims.
+
+| Capability | Planned behavior |
+| --- | --- |
+| Categories and subcategories | Custom groups, merchant rules, and transaction splits whose allocations sum to the original amount without duplicating bank records. |
+| Budgets with carry-forward | Monthly category budgets, budget-versus-actual comparisons, remaining amounts, optional rollover caps and configurable treatment of overspending. |
+| Account balances and trends | Dated bank-reported balances, calculated balances from checkpoints and recorded movements, and separately labelled future projections. |
+| Planned payments and income | One-time and recurring rent, subscriptions, EMIs, insurance, salary and other local commitments, with expected accounts and due dates. |
+| Upcoming payments | Calendar/list views for due soon, overdue, partially paid, paid, skipped and cancelled occurrences, with optional reminders. |
+| Spending forecasts | Expected month-end spend and category/account breakdowns, with visible assumptions and limited-history warnings. |
+| Alerts | Configurable budget thresholds, overspending, upcoming bills and projected account shortfalls. |
+
+**Budget rollover:** choose no rollover, unused-money rollover (optionally capped), or rollover of both surplus and overspending. A ₹5,000 grocery budget with ₹4,200 spent carries ₹800, making next month's allocation ₹5,800 when uncapped. In surplus/deficit mode, a ₹500 overspend reduces the next ₹5,000 allocation to ₹4,500. Budget changes normally affect future periods; late transactions/refunds recalculate actuals and dependent rollover transparently while preserving historical base allocations.
+
+**Balances:** a bank-reported balance shows its source and timestamp. A calculated balance uses a trusted opening/checkpoint plus subsequent recorded movements; it may be incomplete when transactions are missing. A projected balance adds expected income and subtracts future commitments and estimated everyday spending. These are not a promise of a live, exact bank balance. Hiding records never changes account balances; owned-account transfers affect each account but are excluded from combined income/spending. Budget and savings allocations alone do not create expenses.
+
+**Plans and forecasts:** plans do not create posted transactions or execute payments. Actual payments link to planned occurrences, including partial/variable payments, so a payment detected by SMS and later verified by a statement is counted only once. Start with an explainable forecast: spending so far + remaining planned expenses + estimated remaining everyday spending. Exclude commitments already represented in the schedule from the everyday estimate. Forecast category totals must equal the overall forecast.
+
+**Experience:** Home will emphasize labelled balances, remaining budgets and upcoming payments. Insights retains detailed analysis; a dedicated Plan area will hold budgets and schedules. Final navigation placement will be designed without losing access to statements or predictable Home/Back behavior.
+
+Delivery order:
+
+1. Finish outstanding v1.4.1 verification and signed-update checks.
+2. Add reliable balances, account maintenance, paired transfers, richer categories and transaction splits.
+3. Add monthly budgets, carry-forward and budget alerts.
+4. Add payment/income schedules, upcoming-payment views, reminders and matching to actual payments.
+5. Add spending forecasts, projected balance trends and shortfall alerts.
+
+These changes require tested database migrations and an expanded, versioned encrypted backup format. Existing records, evidence, ingestion and reconciliation must survive updates. All planning remains offline and read-only with respect to banks; live bank access, payment execution, cloud services and AI forecasts are outside this expansion. No new version or delivery date is assigned yet. Track implementation separately in [leftout.md](leftout.md).
+
 ## Implemented features
 
 Current implementation gaps, experimental support and pending validation are tracked in [leftout.md](leftout.md). The list below describes available capabilities, not full release sign-off.
 
 - Multiple masked SBI accounts; manual debit/credit entries; categories, tags, notes, merchant display names, hiding and search.
-- Monthly dashboard with income, spending, refunds, net cash flow, breakdowns, comparisons, largest expenses and recurring-payment suggestions.
+- Graphite/emerald Home overview and dedicated Insights: cumulative trends, daily debit/refund and income/expense charts, category donut, signed merchant/channel breakdowns, weekdays, comparisons, averages, largest expenses and recurring suggestions.
 - Incoming SBI SMS tracking with permission-aware status, version 2 conservative parsing, multipart deduplication, background recovery and explicit Needs Review resolution. Observed SBI UPI, NEFT/IMPS, card, CBS, NACH, cash, cheque and mandate formats have been validated against the supplied XML sample.
 - Password-protected SBI Relationship Summary PDF import, durable review drafts, reconciliation summaries, exact/logical duplicate detection, atomic commits and later resolution of ignored rows.
 - Canonical transactions with separate source evidence, bank facts, user metadata, verification, payment outcome and visibility.
@@ -37,6 +71,22 @@ Signed release APK, when local signing configuration is present: app/build/outpu
 The local, gitignored signing.properties and personal-release.jks are signing material created for this personal build. Keep secure copies: future APK updates need the same key. Do not publish either file or its contents. Financial backups do not contain APK signing material.
 
 On another development machine, supply private signing.properties with storeFile, storePassword, keyAlias, and keyPassword. Without it, release assembly produces an unsigned APK. A debug-signed installation cannot be updated with the personal release key; use encrypted backup/restore when switching signatures.
+
+## Appearance and Insights
+
+Version **1.4.1** fixes summary totals, transaction filters and tab navigation. Home shows **Net spent** (debits minus refunds), **Net gained** (ordinary credits) and **Net total** (gained minus spent). ₹1 sent and ₹1 received therefore shows ₹1 / ₹1 / ₹0. Refunds remain separate from ordinary income.
+
+Chart/card/category links open a separate filtered view. The main Transactions tab keeps its own search/filters and shows both directions by default. Active filters are visible with **Clear filters**. Selecting a bottom tab opens its root; Home always opens Home.
+
+Screenshots are enabled once after successful initialization of this update for debugging. Turn them off anytime under **Settings → Security → Allow screenshots on financial screens**; subsequent launches respect that choice. Startup, locked and recovery states stay protected.
+
+The app defaults to dark. Choose **Settings → Appearance → Theme** for Dark, Light or System. Home and Insights share the account and reporting dates; your Transactions search and filters stay independent. Categories, accounts, rules, mandates and backup are grouped in Settings.
+
+Select this month, last month, the last 3/6/12 calendar months, or custom dates (up to ten years). Current ranges stop today. Comparisons use the immediately preceding interval with the same day count. Tap charts or use the date selector/data list for exact values, then open matching transactions. Categories show gross debits; refunds reduce net spending in their posting period and remain separate from income. Merchant charts show the top 20 by absolute net spending. Cash flow describes recorded activity, not an available bank balance.
+
+History loads bounded windows as you scroll. Use its filter sheet for advanced criteria; chart drilldowns have independent filters. Entry forms use native date/time pickers and expandable notes/tags.
+
+Version 1.4 exports backup version 3 to include theme preferences. It restores versions 1–3, using dark when a legacy archive has no theme. Older APKs cannot read version-3 backups.
 
 ## SMS tracking
 

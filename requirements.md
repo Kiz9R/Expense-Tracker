@@ -1,10 +1,12 @@
-Build a production-quality Android application for personal use that functions as a local-first expense tracker for an SBI bank account in India.
+Build a production-quality, offline-first Android personal financial manager for one user with one or more SBI accounts in India, evolving the existing expense tracker without replacing its ledger or losing records.
+
+The financial-manager expansion planned on 2 October 2026 is specified in sections 74–82. It adds richer categories, reliable account balances, carry-forward budgets, planned payments, forecasts and alerts. These are planned requirements, not claims about features available in the current APK. Sections 60–62 retain the original MVP boundary; sections 74–82 take precedence for the expansion's scope.
 
 The application must monitor financial activity using locally available signals such as SBI transaction SMS messages, optionally supported UPI app notifications, and monthly SBI bank statements imported manually by the user.
 
-The application must NOT initiate, receive, approve, schedule, or otherwise participate in financial transactions.
+The application must NOT initiate, receive, approve, schedule execution of, or otherwise participate in bank or payment transactions. Local payment plans, recurring schedules and reminders are allowed; they must never instruct a bank or payment provider to move money.
 
-It is strictly a read-only financial tracking and reconciliation application.
+It remains strictly read-only with respect to banks and payment providers, while supporting local financial tracking, reconciliation and planning.
 
 The application must never require the user's SBI internet banking password, UPI PIN, debit card PIN, OTP, or other banking credentials.
 
@@ -40,6 +42,11 @@ Create a private Android personal finance application that allows the user to:
 - Track recurring payments and mandates separately.
 - Identify reversals, refunds, failed transactions, and mandate events correctly.
 - Backup and restore all local financial tracking data.
+- Manage category budgets with configurable carry-forward.
+- Plan future payments and income, and track upcoming commitments.
+- Understand bank-reported, calculated and projected account balances.
+- Compare actual and forecast spending, including category breakdowns.
+- Receive local budget, overspending, upcoming-payment and projected-shortfall alerts.
 
 The app is intended initially for one user and one or more SBI accounts belonging to that user.
 
@@ -72,7 +79,7 @@ The project should be structured cleanly and designed for maintainability.
 
 Target modern Android versions.
 
-Prefer Android 10 or newer unless a technical reason requires broader support.
+Require Android 11 (API 30) or newer, consistent with the existing application and approved expansion.
 
 Do not use React Native, Flutter, or Java unless explicitly changed later.
 
@@ -402,6 +409,8 @@ Default categories should include:
 - Other
 
 Allow custom categories.
+
+The planned expansion adds category hierarchy and transaction splits under section 75; these must preserve canonical bank amounts and evidence.
 
 ---
 
@@ -1309,14 +1318,7 @@ Initial analytics:
 - recurring expenses
 - number of transactions
 
-Later features may include:
-
-- budgets
-- savings targets
-- subscription analysis
-- recurring expense forecasts
-
-Do not make these mandatory for the MVP.
+The original MVP does not require budgets or forecasts. The planned financial-manager expansion now includes carry-forward budgets, recurring payment planning, forecast spending and balance trends under sections 74–82. Standalone savings targets and advanced subscription analysis remain future scope unless separately specified.
 
 ---
 
@@ -1901,6 +1903,8 @@ Version 1.0 should include:
 
 # 61. Features That Can Wait
 
+This historical MVP list does not defer the budgets and forecasts now planned in sections 74–82. Payment execution remains prohibited by section 63, rather than merely postponed.
+
 Do not block MVP development on:
 
 - cloud sync
@@ -1916,7 +1920,7 @@ Do not block MVP development on:
 - investments
 - tax filing
 - financial advice
-- complex budgeting
+- budgeting beyond the carry-forward scope in section 77
 
 ---
 
@@ -1929,13 +1933,15 @@ Architecture should allow future support for:
 - credit cards
 - multiple currencies
 - Account Aggregator integrations
-- budgets
+- additional budgeting features beyond section 77
 - recurring expense detection
 - subscription tracking
 - family profiles
 - optional encrypted cloud backup
 
 But do not over-engineer the initial version.
+
+The next expansion's categories, balances, budgets, planning and forecasts are defined in sections 74–82. Other banks/cards/currencies, bank APIs, cloud sync and family profiles are not added to that scope.
 
 ---
 
@@ -2051,6 +2057,8 @@ Do not use color alone to communicate transaction status.
 ---
 
 # 68. Initial Navigation
+
+This section records the original navigation proposal. The current five tabs are Home, Transactions, Insights, Statements and Settings. The expansion adds a dedicated Plan area as specified in section 81; its final tab placement is an implementation design decision.
 
 Recommended bottom navigation:
 
@@ -2379,3 +2387,127 @@ Read-only with respect to the bank.
 Safe against duplicate ingestion.
 
 Transparent about where each transaction came from.
+
+---
+
+# 74. Financial Manager Expansion Scope
+
+Planned on **2 October 2026**. Evolve the existing app to answer: where did my money go, what have I committed to, and what can I afford next?
+
+Retain Android 11+, INR, Asia/Kolkata reporting, offline operation, the graphite/emerald design, local encryption, canonical transactions, statement reconciliation, incoming-only SMS tracking and encrypted recovery. No rewrite or destructive database reset is authorized by this expansion.
+
+Add categories/subcategories, transaction splits, account balance checkpoints, paired owned-account transfers, monthly carry-forward budgets, planned payments/income, upcoming-payment views, spending forecasts, balance trends and local alerts. Preserve actual-versus-provisional indicators and the existing Net spent / Net gained / Net total definitions.
+
+Plans and forecasts are separate from recorded money movements. Budget allocations are planning amounts, not bank debits. Savings allocations alone do not count as expenses. Do not introduce live banking access, payment execution, AI forecasts, cloud services, investment trading or tax advice as part of this scope.
+
+# 75. Categories and Transaction Splits
+
+- Support editable custom categories and subcategories, such as Food → Groceries / Restaurants, with recognizable icons and labels.
+- Preserve merchant rules and explicit user overrides. Parent totals include their children without counting the same allocation twice.
+- Allow one canonical transaction to be allocated across multiple categories. Split amounts must sum exactly to the transaction amount in integer paise; splits must not create extra bank transactions or duplicate evidence.
+- Keep history usable when categories are renamed or archived. Provide a safe reassignment flow where deletion would leave records without a category.
+- Show category/merchant/account breakdowns and budget-versus-actual comparisons. Category drilldowns must explain the allocation amounts contributing to a total.
+- Preserve refund/reversal accounting in the posting period; refund allocations must not cause the original debit to be subtracted twice.
+
+# 76. Account Balances and Trends
+
+Support account nickname/type maintenance and deactivation without removing historical ownership, plus paired transfers between owned accounts.
+
+Expose three distinct balance types per account:
+
+| Balance | Definition and presentation |
+| --- | --- |
+| Last bank-reported balance | A statement or supported SMS balance with source, effective timestamp and verification context. Preserve the type of balance reported; do not equate an available balance with a ledger balance without evidence. |
+| Calculated current balance | A trusted opening/checkpoint balance plus subsequent recorded credits minus debits. Label user-entered openings and provisional/incomplete coverage explicitly. |
+| Projected balance | Calculated balance plus expected income minus remaining planned payments and estimated everyday spending, with assumptions and forecast date. |
+
+- Never describe incomplete SMS coverage as a guaranteed live or exact bank balance. Missing checkpoints produce an unavailable balance, not an invented zero.
+- Store checkpoint source and effective cutoff. Include only movements after that cutoff so a transaction already reflected in the checkpoint is not counted again. Ambiguous ordering or conflicting checkpoints require a visible warning/review.
+- Late observations, duplicate evidence and imported statements must not double-count movements. Preserve balance discrepancies rather than silently adjusting bank facts.
+- Hiding a transaction must not change account balances. Failed payments and unexecuted plans do not move balances. Refunds and reversals remain actual credit movements.
+- Owned-account transfers affect the individual accounts but are excluded from combined income/spending. Pair their debit and credit without collapsing them into one account movement.
+- Show historical balance trends and visually distinct future projections, with labelled values and accessible data lists. Do not imply historical coverage before a known checkpoint.
+
+# 77. Monthly Budgets and Carry-Forward
+
+Support monthly category budgets with explicit account scope, base allocation, carried amount, effective allocation, actual spending and remaining amount. Use calendar months in Asia/Kolkata. Parent/category allocations must avoid overlapping double-counting.
+
+Each budget supports these rollover modes:
+
+1. No rollover.
+2. Carry unused money forward, optionally capped.
+3. Carry both surplus and overspending forward; deficits reduce the next period's allocation.
+
+Example: a ₹5,000 grocery allocation with ₹4,200 spent leaves ₹800. Without a cap, positive rollover makes next month's allocation ₹5,800. In surplus/deficit mode, a ₹500 overspend instead makes it ₹4,500.
+
+Effective allocation = base allocation + carried amount. Remaining = effective allocation − eligible actual spending. Preserve negative remaining amounts; budget allocations and rollover must never create transactions or alter account balances.
+
+Ordinary credits are income, not budget refunds. Refund/reversal credits reduce spending in their posting month. Preserve existing hidden/failed/owned-transfer spending exclusions, and make budget-specific exclusions explicit without changing the balance ledger.
+
+Budget changes normally apply to future periods. Preserve previous periods' original base allocations and applicable rules. Late transactions and refunds recalculate affected actuals and subsequent rollover deterministically, with the change visible to the user. Reopening the app or rerunning a job must not apply rollover twice.
+
+# 78. Planned Payments, Income and Upcoming Activity
+
+- Support one-time and recurring expenses/income with description, amount or variable-amount estimate, category, expected account, due date, recurrence and optional end date.
+- Include rent, subscriptions, EMIs, insurance and salary as examples of local plans; no payment is executed by the app.
+- Separate schedule definitions from individual occurrences. Define month-end/leap-date recurrence behavior explicitly and support edits to a single occurrence or future occurrences without rewriting settled history.
+- Provide chronological and calendar views showing upcoming, due soon, overdue, partially paid, paid/received, skipped and cancelled occurrences.
+- Support variable actual amounts and partial payments. Match actual canonical transactions to planned occurrences with explicit confirmation when uncertain. One actual amount cannot settle multiple occurrences beyond its total value.
+- A linked transaction reduces the occurrence's remaining forecast amount; it must not be counted again as an unpaid future commitment. SMS and statement evidence of that transaction must not settle the plan twice.
+- Marking an item paid must link an existing actual transaction or explicitly create a manual transaction through the normal ledger flow. A reminder or mandate authorization alone never creates spending.
+- Recurring-payment suggestions require confirmation before becoming schedules. Mandate creation/cancellation and local plans remain distinct records.
+
+# 79. Spending and Balance Forecasts
+
+Start with deterministic, explainable forecasts, not an AI service:
+
+**Forecast month-end spending = spending so far + remaining planned expenses + estimated remaining everyday spending.**
+
+- Exclude spending already represented by scheduled commitments from the everyday-spending estimate. Paid or skipped occurrences must not remain in future commitments.
+- State the historical window, remaining period, included accounts and assumptions. Show limited-history or incomplete-ledger warnings; forecasts are estimates, not guarantees.
+- Provide forecast spending by category and account, alongside actual spending and budgets. Forecast category amounts must reconcile exactly to the total, including deterministic paise rounding.
+- Show expected income separately and use it for projected account balances. Explain refunds separately from ordinary income and preserve negative net spending where appropriate.
+- Allow the user to inspect the planned items and recorded transactions underlying a forecast. Never display projected transactions as posted bank activity.
+- Keep historical and future portions of balance/spending charts visually and textually distinct. Account-specific shortfall projections require a known starting balance and account-assigned commitments; flag unassigned items rather than guessing.
+
+# 80. Local Alerts
+
+- Provide configurable budget-threshold, overspending, upcoming-payment and projected-account-shortfall alerts.
+- Explain the relevant category/account, period and calculation; distinguish an actual budget overrun from a predicted shortfall.
+- Deduplicate alerts per relevant threshold/occurrence and support user dismissal and preferences. Changes to plans, transactions or budgets must update stale alerts.
+- Request Android notification permission only when alerts are enabled and permission is required. In-app status remains usable if permission is denied. Notification delivery can be delayed by Android background restrictions; do not promise exact-time delivery.
+- Protect financial details on the lock screen and retain offline operation. Alerting must never initiate or authorize payments.
+
+# 81. Experience, Delivery Order and Data Evolution
+
+Home should prioritize labelled account balances, remaining budgets, upcoming payments and the existing recorded-spending summaries. Keep detailed analysis in Insights and add a dedicated Plan area for budgets and schedules. Preserve accessible routes to transactions, statements, Settings and reconciliation; retain predictable Home/Back behavior and independent drilldown filters.
+
+Deliver in this order, after closing the outstanding v1.4.1 verification failures and signed-update checks:
+
+1. **Balances and categories:** checkpoints, account maintenance, paired owned transfers, subcategories and transaction splits.
+2. **Budgets:** monthly allocations, rollover, budget-versus-actual views and threshold/overspending alerts.
+3. **Payment planning:** recurring schedules, upcoming calendar/list, reminders and actual-payment matching.
+4. **Forecasts:** spending/category estimates, projected balance trends and shortfall alerts.
+
+Introduce normalized planning records and repositories alongside the existing ledger. Use tested, non-destructive Room migrations and version the encrypted backup format when its contents expand. Back up and restore hierarchy/splits, checkpoints, transfer links, budget periods/rules, schedules/occurrences, settlement links and relevant settings. Define defaults for older archives, validate new relationships before replacement and preserve rollback on failure. No schema or archive version is changed by this requirements update.
+
+Keep the single root development reference and feature tracker current. No release version or delivery date is assigned to these stages yet.
+
+# 82. Financial Manager Acceptance Scenarios
+
+These supplement, rather than replace, the original twelve scenarios in section 72. All are planned checks until implementation and dated validation evidence exist.
+
+| ID | Required result |
+| --- | --- |
+| FM01 | Split a ₹1,000 transaction into ₹600 groceries and ₹400 household spending: category totals sum to ₹1,000 and only one canonical bank transaction remains. |
+| FM02 | A ₹5,000 budget with ₹4,200 spent carries ₹800 into the next month when enabled; no-rollover, capped-rollover and deficit modes each follow their configured rules. |
+| FM03 | A ₹500 deficit reduces the next ₹5,000 allocation to ₹4,500 in surplus/deficit mode. Repeated recalculation and process recreation never apply rollover twice. |
+| FM04 | A late transaction or refund updates the correct posting month's actuals and dependent rollover, preserving historical base allocations and exposing the recalculation. |
+| FM05 | From a dated ₹10,000 checkpoint, a later ₹1,000 debit and ₹500 credit produce ₹9,500. Duplicate SMS/statement evidence and transactions already included in the checkpoint do not change it again. |
+| FM06 | Hiding a posted transaction does not change balances. A ₹1,000 paired owned transfer changes both account balances but adds no combined income or spending. |
+| FM07 | A ₹2,000 planned bill changes forecasts only. A linked ₹800 actual payment contributes once to actual spending and leaves ₹1,200 planned; later statement verification creates no additional payment. |
+| FM08 | Recurrence works across month ends and leap dates. Variable, skipped, cancelled, overdue and partially paid occurrences remain correct after edits and restarts. |
+| FM09 | Forecasts exclude paid commitments and avoid overlap with everyday-spending estimates. Category totals equal the displayed forecast; short history and unknown opening balances are labelled. |
+| FM10 | Budget/shortfall/reminder alerts respect preferences, avoid repeated duplicates, update after corrections and remain understandable when notification permission is denied. |
+| FM11 | Upgrade and backup/restore preserve existing records and all new planning relationships. Older archives receive documented defaults; corrupt archives and failed migrations/restores leave existing data intact. |
+| FM12 | Account/date isolation, partial periods, paise rounding, negative totals, accessible chart alternatives, large fonts, offline use and multi-year performance remain correct across Home, Plan, Insights and exact drilldowns. |

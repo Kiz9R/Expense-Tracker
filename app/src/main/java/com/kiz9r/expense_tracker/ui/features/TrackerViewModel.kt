@@ -1,6 +1,10 @@
 package com.kiz9r.expense_tracker.ui.features
 
 import android.net.Uri
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.createSavedStateHandle
+import com.google.gson.Gson
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kiz9r.expense_tracker.backup.*
@@ -19,13 +23,17 @@ import javax.inject.Inject
 class TrackerViewModel @Inject constructor(
     val ledger: LedgerRepository, val reconciliation: ReconciliationRepository,
     private val saveManual: SaveManualTransaction, private val pdf: PdfTextExtractor, private val backup: BackupService,
-    val statementJobs: StatementJobs
+    val statementJobs: StatementJobs,
+    private val savedState: SavedStateHandle = SavedStateHandle()
 ) : ViewModel() {
+    val analyticsFactory=androidx.lifecycle.viewmodel.viewModelFactory {
+        initializer { com.kiz9r.expense_tracker.analytics.AnalyticsViewModel(com.kiz9r.expense_tracker.analytics.AnalyticsRepository(ledger.db),ledger,createSavedStateHandle()) }
+    }
     private val sharing = SharingStarted.WhileSubscribed(5000)
     val ready = MutableStateFlow(false)
     val busy = MutableStateFlow(false)
     val message = MutableStateFlow<String?>(null)
-    val filter = MutableStateFlow(HistoryFilter())
+    val filter = MutableStateFlow(savedState.get<String>("history_filter")?.let {runCatching {Gson().fromJson(it,HistoryFilter::class.java)}.getOrNull()} ?: HistoryFilter())
     val month = MutableStateFlow(YearMonth.from(Dates.today()))
     private val accountState = MutableStateFlow<List<AccountEntity>>(emptyList())
     val accounts: StateFlow<List<AccountEntity>> = accountState
@@ -54,7 +62,10 @@ class TrackerViewModel @Inject constructor(
     val restorePreview = MutableStateFlow<BackupSnapshot?>(null)
     val importJobs=statementJobs.jobs.stateIn(viewModelScope,sharing,emptyList())
     private var activeImportJob: String? = null
-    init { initialize() }
+    init {
+        viewModelScope.launch {filter.collect {savedState["history_filter"]=Gson().toJson(it)}}
+        initialize()
+    }
     fun initialize() = action {
         ledger.initialize()
         // Read the first real account result before selecting onboarding vs. the ledger.

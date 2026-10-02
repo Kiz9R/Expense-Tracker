@@ -14,7 +14,7 @@ object BackupArchive {
             val root=JsonParser.parseString(plain.toString(Charsets.UTF_8)).asJsonObject
             require(root.get("version")?.isJsonPrimitive==true && root.getAsJsonPrimitive("version").isNumber)
             require(root.get("createdAt")?.isJsonPrimitive==true && root.getAsJsonPrimitive("createdAt").isNumber)
-            require(root.get("version")?.asBigDecimal?.intValueExact() in 1..2)
+            require(root.get("version")?.asBigDecimal?.intValueExact() in 1..3)
             require(root.get("createdAt")?.asBigDecimal?.longValueExact()?.let { it>0 }==true)
             // Gson can otherwise silently default absent primitives or null collections.
             val required=mapOf(
