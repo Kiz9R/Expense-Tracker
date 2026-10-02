@@ -17,6 +17,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.*
+import kotlin.time.Duration.Companion.seconds
 
 @EntryPoint @InstallIn(SingletonComponent::class)
 interface IngestionEntryPoint {
@@ -42,7 +43,7 @@ class SbiSmsReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(SupervisorJob()+Dispatchers.IO).launch {
             try {
-                withTimeout(8000) {
+                withTimeout(8.seconds) {
                     val graph = dependencies(context)
                     if(graph.smsIntake().accept(parts,receivedAt,
                             ContextCompat.checkSelfPermission(context,Manifest.permission.RECEIVE_SMS)==PackageManager.PERMISSION_GRANTED,
@@ -61,13 +62,13 @@ class IngestionRecoveryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if(intent.action !in listOf(Intent.ACTION_BOOT_COMPLETED,Intent.ACTION_MY_PACKAGE_REPLACED) ||
             !context.getSystemService(UserManager::class.java).isUserUnlocked) return
-        runCatching { scheduleIngestion(context) }
+        runCatching { scheduleIngestion(context); com.kiz9r.expense_tracker.planning.scheduleBudgetAlerts(context) }
     }
 }
 class IngestionWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context,params) {
     override suspend fun doWork(): Result {
         if(!applicationContext.getSystemService(UserManager::class.java).isUserUnlocked) return Result.retry()
-        return try { dependencies(applicationContext).reconciliation().processPending(); Result.success() }
+        return try { dependencies(applicationContext).reconciliation().processPending(); com.kiz9r.expense_tracker.planning.scheduleBudgetAlerts(applicationContext); Result.success() }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { Result.retry() }
     }

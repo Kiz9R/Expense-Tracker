@@ -16,6 +16,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.time.YearMonth
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.minutes
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -24,30 +26,33 @@ class TrackerViewModel @Inject constructor(
     val ledger: LedgerRepository, val reconciliation: ReconciliationRepository,
     private val saveManual: SaveManualTransaction, private val pdf: PdfTextExtractor, private val backup: BackupService,
     val statementJobs: StatementJobs,
-    private val savedState: SavedStateHandle = SavedStateHandle()
+    private val savedState: SavedStateHandle
 ) : ViewModel() {
     val analyticsFactory=androidx.lifecycle.viewmodel.viewModelFactory {
         initializer { com.kiz9r.expense_tracker.analytics.AnalyticsViewModel(com.kiz9r.expense_tracker.analytics.AnalyticsRepository(ledger.db),ledger,createSavedStateHandle()) }
     }
-    private val sharing = SharingStarted.WhileSubscribed(5000)
+    private val sharing = SharingStarted.WhileSubscribed(5.seconds)
     val ready = MutableStateFlow(false)
     val busy = MutableStateFlow(false)
     val message = MutableStateFlow<String?>(null)
     val filter = MutableStateFlow(savedState.get<String>("history_filter")?.let {runCatching {Gson().fromJson(it,HistoryFilter::class.java)}.getOrNull()} ?: HistoryFilter())
-    val month = MutableStateFlow(YearMonth.from(Dates.today()))
     private val accountState = MutableStateFlow<List<AccountEntity>>(emptyList())
     val accounts: StateFlow<List<AccountEntity>> = accountState
     private var accountObserver: Job? = null
     val categories = ledger.categories.stateIn(viewModelScope,sharing,emptyList())
+    val balances = com.kiz9r.expense_tracker.planning.BalanceRepository(ledger.db)
+    val budgets = com.kiz9r.expense_tracker.planning.BudgetRepository(ledger.db)
+    val classification = com.kiz9r.expense_tracker.planning.ClassificationRepository(ledger.db)
+    val budgetMonth=MutableStateFlow(savedState.get<String>("budget_month")?.let(YearMonth::parse) ?: YearMonth.from(Dates.today()))
+    private val reportingDay=flow {while(true){emit(Dates.today());delay(1.minutes)}}.distinctUntilChanged()
+    val balanceReports=reportingDay.flatMapLatest{balances.observe(it)}.catch {message.value=it.message}.stateIn(viewModelScope,sharing,emptyList())
+    val budgetReports=combine(budgetMonth,reportingDay){month,day->month to day}.flatMapLatest{budgets.observe(it.first)}.catch{message.value=it.message}.stateIn(viewModelScope,sharing,emptyList())
+    fun planningState(id: String)=ledger.db.invalidationTracker.createFlow("allocations","budget_exclusions","transfer_pairs").map {
+        Triple(ledger.db.planning().allocations(id),ledger.db.planning().excluded(id)>0,ledger.db.planning().pair(id))
+    }.flowOn(Dispatchers.IO)
     // Fail closed while encrypted settings load, so a locked ledger never flashes on screen.
     val settings = ledger.settings.stateIn(viewModelScope,sharing,listOf(SettingEntity("app_lock","true")))
     val transactions = filter.flatMapLatest(ledger::history).stateIn(viewModelScope,sharing,emptyList())
-    val totals = combine(month,filter) { m,f -> m to f.accountId }.flatMapLatest { (m,a) -> ledger.totals(m,a) }.stateIn(viewModelScope,sharing,MonthlyTotals())
-    val previousTotals = combine(month,filter) { m,f -> m.minusMonths(1) to f.accountId }.flatMapLatest { (m,a) -> ledger.totals(m,a) }.stateIn(viewModelScope,sharing,MonthlyTotals())
-    val grouping = MutableStateFlow("category")
-    val breakdown = combine(month,filter,grouping) { m,f,g -> Triple(m,f.accountId,g) }.flatMapLatest { (m,a,g) -> ledger.breakdown(m,a,g) }.stateIn(viewModelScope,sharing,emptyList())
-    val largest = combine(month,filter) { m,f -> m to f.accountId }.flatMapLatest { (m,a) -> ledger.largest(m,a) }.stateIn(viewModelScope,sharing,emptyList())
-    val recurring = filter.flatMapLatest { ledger.recurring(it.accountId) }.stateIn(viewModelScope,sharing,emptyList())
     val imports = ledger.imports.stateIn(viewModelScope,sharing,emptyList())
     val reviews = ledger.reviews.stateIn(viewModelScope,sharing,emptyList())
     val smsStats = ledger.smsStats.stateIn(viewModelScope,sharing,SmsStats())
@@ -64,6 +69,7 @@ class TrackerViewModel @Inject constructor(
     private var activeImportJob: String? = null
     init {
         viewModelScope.launch {filter.collect {savedState["history_filter"]=Gson().toJson(it)}}
+        viewModelScope.launch {budgetMonth.collect{savedState["budget_month"]=it.toString()}}
         initialize()
     }
     fun initialize() = action {

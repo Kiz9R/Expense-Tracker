@@ -32,8 +32,9 @@ class StatementUiTest {
             ledger.setting("screenshots","true")
             job.id
         }
-        compose.waitUntil(15000) {compose.onAllNodesWithTag("navigation.statements").fetchSemanticsNodes().isNotEmpty()}
-        compose.onNodeWithTag("navigation.statements").performClick()
+        compose.waitUntil(15000) {compose.onAllNodesWithTag("navigation.settings").fetchSemanticsNodes().isNotEmpty()}
+        compose.onNodeWithTag("navigation.settings").performClick()
+        compose.onNodeWithTag("settings.statements").performScrollTo().performClick()
         compose.waitUntil(15000) {compose.onAllNodesWithTag("statements.jobs.resume."+jobId).fetchSemanticsNodes().isNotEmpty()}
         compose.onNodeWithTag("statements.jobs.resume."+jobId).performScrollTo().performClick()
         compose.waitUntil(15000) {compose.onAllNodesWithTag("statements.summary").fetchSemanticsNodes().isNotEmpty()}

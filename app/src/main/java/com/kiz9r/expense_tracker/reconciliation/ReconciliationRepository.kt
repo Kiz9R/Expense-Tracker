@@ -327,10 +327,12 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
         require(dao.refundLink(refund.id)==null) { "Credit is already linked." }
         val total = Math.addExact(dao.refundedAmount(original.id),refund.amountMinor)
         require(total <= original.amountMinor) { "Refunds exceed the original debit." }
+        require(db.planning().pair(original.id)==null && db.planning().pair(refund.id)==null) { "Unpair transfers before linking refunds." }
         dao.saveRefund(RefundLinkEntity(original.id,refund.id,refund.amountMinor))
         dao.saveTransaction(refund.copy(kind=if(refund.kind==EventKind.REVERSAL) EventKind.REVERSAL else EventKind.REFUND))
         val metadata=dao.metadata(refund.id) ?: MetadataEntity(refund.id)
         if(!metadata.userEdited) dao.saveMetadata(metadata.copy(categoryId=dao.metadata(original.id)?.categoryId))
+        com.kiz9r.expense_tracker.planning.ClassificationRepository(db).syncRefunds(original.id)
         dao.saveTransaction(original.copy(outcome=if(total < original.amountMinor) Outcome.PARTIALLY_REFUNDED
             else if(refund.kind==EventKind.REVERSAL) Outcome.REVERSED else Outcome.REFUNDED))
     }

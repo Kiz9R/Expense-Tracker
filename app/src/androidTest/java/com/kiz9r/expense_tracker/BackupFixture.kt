@@ -41,7 +41,8 @@ internal fun completeBackupFixture(): BackupSnapshot {
         reviewDecisions=listOf(ReviewDecisionEntity("decision",identity,"new","purchase",decidedAt=time),ReviewDecisionEntity("ignore","ignored-source","ignore",null,decidedAt=time),ReviewDecisionEntity("mandate-decision","mandate-source","new",null,decidedAt=time)),
         mandates=listOf(MandateEntity("mandate","a1","SAMPLE SHOP",5000,"MANDATE60001","ACTIVE","e3")),
         refundLinks=listOf(RefundLinkEntity("purchase","refund",2000)),
-        settings=listOf(SettingEntity("sms","true"),SettingEntity("notifications","true"),SettingEntity("app_lock","false"),SettingEntity("screenshots","false"),SettingEntity("sms_last_received",time.toString())))
+        checkpoints=listOf(BalanceCheckpointEntity("statement:import","a1","2026-09-15",10000,"STATEMENT","import",false,time)),
+        settings=listOf(SettingEntity("sms","true"),SettingEntity("notifications","true"),SettingEntity("app_lock","false"),SettingEntity("screenshots","false"),SettingEntity("sms_last_received",time.toString()),SettingEntity("budget_notifications","false")))
 }
 
 internal fun backupDigest(snapshot: BackupSnapshot): String {

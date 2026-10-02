@@ -86,6 +86,7 @@ import com.kiz9r.expense_tracker.domain.*
                     Text(item.displayName,Modifier.weight(1f),maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.titleSmall)
                     Text((if(tx.direction==Direction.DEBIT) "− " else "+ ")+Money.format(tx.amountMinor),color=color,style=MaterialTheme.typography.labelLarge)
                 }
+                item.allocationMinor?.let{Text(Money.format(it)+" allocated of "+Money.format(tx.amountMinor),style=MaterialTheme.typography.labelLarge)}
                 Text(listOfNotNull(item.categoryName,item.accountName).joinToString(" · "),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 Text((if(tx.verification==Verification.VERIFIED) "✓ " else "◷ ")+status,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }

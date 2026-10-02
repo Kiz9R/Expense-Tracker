@@ -59,11 +59,12 @@ class MainActivity : FragmentActivity() {
             val screenshots = settings.firstOrNull { it.key=="screenshots" }?.value=="true"
             val themeMode=settings.firstOrNull {it.key=="theme_mode"}?.value ?: "dark"
             val light=themeMode=="light" || (themeMode=="system" && !androidx.compose.foundation.isSystemInDarkTheme())
+            val protectWindow=shouldProtectWindow(displaySettingsReady,screenshots,lockEnabled && locked)
             SideEffect {
                 androidx.core.view.WindowCompat.getInsetsController(window,window.decorView).apply {
                     isAppearanceLightStatusBars=light;isAppearanceLightNavigationBars=light
                 }
-                if(shouldProtectWindow(displaySettingsReady,screenshots,lockEnabled && locked)) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                if(protectWindow) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
             ExpensetrackerTheme(mode=settings.firstOrNull { it.key=="theme_mode" }?.value ?: "dark") {

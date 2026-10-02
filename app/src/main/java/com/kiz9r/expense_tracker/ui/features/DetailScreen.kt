@@ -44,6 +44,7 @@ import com.kiz9r.expense_tracker.data.*
             modifier=Modifier.testTag("transactions.detail.save")){Text("Save personal details")}
         OutlinedButton(onClick={vm.action("Merchant rule created."){vm.ledger.rule(MerchantRuleEntity(
             matchType="exact",matchValue=tx.merchantOriginal,rename=name,categoryId=category.ifBlank{null}))}}){Text("Use these details for this merchant")}
+        TransactionPlanning(vm,tx)
         Heading("Tracking preferences")
         Toggle("Hide from tracker",current.hidden,"transactions.detail.hide"){vm.action {vm.ledger.hide(id,it)}}
         Toggle("Transfer between my own accounts",tx.ownedTransfer,"transactions.detail.owned-transfer"){vm.action {vm.ledger.ownedTransfer(id,it)}}

@@ -5,10 +5,14 @@ import androidx.room.RoomDatabase
     MetadataEntity::class, RawEventEntity::class, EvidenceEntity::class, TagEntity::class,
     TransactionTagEntity::class, MerchantRuleEntity::class, StatementImportEntity::class,
     StatementRowEntity::class, ReviewDecisionEntity::class, MandateEntity::class,
-    RefundLinkEntity::class, SettingEntity::class, ImportJobEntity::class], version = 2, exportSchema = true)
+RefundLinkEntity::class, SettingEntity::class, ImportJobEntity::class,
+    BalanceCheckpointEntity::class, AllocationEntity::class, TransferPairEntity::class, BudgetExclusionEntity::class,
+    BudgetEntity::class, BudgetRevisionEntity::class, BudgetPeriodEntity::class, BudgetCoverageEntity::class, BudgetAlertEntity::class],
+    views=[EffectiveAllocation::class], version = 3, exportSchema = true)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun ledger(): LedgerDao
-    abstract fun backup(): BackupDao
+abstract fun backup(): BackupDao
+    abstract fun planning(): PlanningDao
     abstract fun analytics(): com.kiz9r.expense_tracker.analytics.AnalyticsDao
 }
 /** Preserve financial records and unfinished parsing jobs from the first release. */

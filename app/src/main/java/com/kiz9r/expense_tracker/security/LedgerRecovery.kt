@@ -16,12 +16,12 @@ object EncryptedLedger {
         System.loadLibrary("sqlcipher")
         return Room.databaseBuilder(context,LedgerDatabase::class.java,name)
             .openHelperFactory(SupportOpenHelperFactory(keys.databasePassword(name)))
-            .addMigrations(MIGRATION_1_2).build()
+.addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 }
 
 /** No dependency on the inaccessible database: authenticate first, stage separately, then activate. */
-class LedgerRecovery @Inject constructor(@ApplicationContext private val context: Context,
+class LedgerRecovery @Inject constructor(@param:ApplicationContext private val context: Context,
     private val keys: DatabaseKeys, private val gson: Gson) {
     suspend fun checkAccessible() = withContext(Dispatchers.IO) {
         val db=EncryptedLedger.open(context,keys)

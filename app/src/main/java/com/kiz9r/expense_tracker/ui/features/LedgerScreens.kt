@@ -5,7 +5,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -51,11 +50,14 @@ import kotlinx.coroutines.flow.catch
             "Your expense data stays on this device. No login, no bank password, no payments.")
         if(!onboarding) accounts.forEach { account ->
             Row(Modifier.fillMaxWidth().testTag("accounts.items."+account.id),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text(account.nickname+" · SBI ••••"+account.last4+" · "+account.accountType,Modifier.weight(1f))
+                Text(account.nickname+" · SBI ••••"+account.last4+" · "+account.accountType+(if(account.active) "" else " · Archived"),Modifier.weight(1f))
                 TextButton(enabled=!busy,onClick={deleteId=account.id},modifier=Modifier.testTag("accounts.items."+account.id+".delete")) {
                     Text("Delete",color=MaterialTheme.colorScheme.error)
                 }
             }
+        }
+        if(!onboarding) accounts.forEach { account->
+            Text(account.nickname); AccountMaintenance(vm,account)
         }
         if(onboarding) OutlinedButton(onClick={restoring=true},modifier=Modifier.testTag("accounts.restore")) { Text("Restore an encrypted backup") }
         Field(name,{name=it},"Account nickname","accounts.form.nickname")
@@ -159,7 +161,7 @@ import kotlinx.coroutines.flow.catch
 }
 @Composable fun TransactionForm(vm: TrackerViewModel, id: String?, done: (String)->Unit) {
     val existing by remember(id) { if(id!=null) vm.ledger.detail(id) else flowOf(null) }.collectAsStateWithLifecycle(null)
-    val existingTags by remember(id) { if(id!=null) vm.ledger.tags(id) else flowOf(emptyList()) }.collectAsStateWithLifecycle(emptyList())
+    val existingTags by remember(id) { if(id!=null) vm.ledger.tags(id) else flowOf(emptyList()) }.collectAsStateWithLifecycle<List<TagEntity>?>(null)
     val accounts by vm.accounts.collectAsStateWithLifecycle()
     val categories by vm.categories.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
@@ -178,11 +180,11 @@ import kotlinx.coroutines.flow.catch
     val pickerStyle=if(MaterialTheme.colorScheme.background.luminance()<.5f) android.R.style.Theme_DeviceDefault_Dialog else android.R.style.Theme_DeviceDefault_Light_Dialog
     LaunchedEffect(existing,existingTags) {
         val item=existing
-        if(item!=null && !loaded) {
+        if(item!=null && existingTags!=null && !loaded) {
             val tx=item.transaction;account=tx.accountId;amount=Money.input(tx.amountMinor);direction=tx.direction.name;date=tx.date
             time=tx.timestamp?.let {java.time.Instant.ofEpochMilli(it).atZone(Dates.zone).toLocalTime().withSecond(0).withNano(0).toString()} ?: "12:00"
             merchant=item.displayName;category=item.categoryId.orEmpty();notes=item.notes
-            tags=existingTags.joinToString(", ") {it.name}
+            tags=existingTags.orEmpty().joinToString(", ") {it.name}
             loaded=true
         }
     }

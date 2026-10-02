@@ -2,7 +2,7 @@
 
 This is the single development reference for the SBI Expense Tracker. It consolidates the foundation and all seven former package documents. Read [requirements.md](requirements.md) for product requirements, [leftout.md](leftout.md) for current implementation and verification status, [VALIDATION.md](VALIDATION.md) for dated executed checks, and [rules.md](rules.md) for maintenance rules. Setup, installation and recovery instructions remain in [README.md](README.md).
 
-Last audited: 17 September 2026. This document describes existing code; it does not certify every requirement as complete. The approved plan keeps Android 11+, multiple SBI accounts, INR, English UI, PDF-first import and replacement restore. Notification ingestion is optional. The SBI Relationship Summary savings-account layout is validated against the supplied four-page encrypted sample; the earlier generic text-table parser remains experimental.
+Last audited: 2 October 2026. This document describes existing code; it does not certify every requirement as complete. The approved plan keeps Android 11+, multiple SBI accounts, INR, English UI, PDF-first import and replacement restore. Notification ingestion is optional. The SBI Relationship Summary savings-account layout is validated against the supplied four-page encrypted sample; the earlier generic text-table parser remains experimental.
 
 ## Table of contents
 
@@ -22,6 +22,7 @@ Last audited: 17 September 2026. This document describes existing code; it does 
 - [Testing and release](#testing-and-release)
 - [Known limitations and extension boundaries](#known-limitations-and-extension-boundaries)
 - [Planned financial-manager expansion](#planned-financial-manager-expansion)
+- [Foundations and budgets](#v150-foundations-and-budgets)
 
 ## Architecture and execution flow
 
@@ -52,7 +53,7 @@ Configuration lives in [app/build.gradle.kts](app/build.gradle.kts), [root build
 
 Android Storage Access Framework supplies scoped document selection/export. Coroutines move extraction and ingestion off the UI thread. No banking service or remote API is used.
 
-Room schema export is configured through KSP. Schema version 2 adds nullable statement warning JSON and import-job review-token/choice JSON. MIGRATION_1_2 preserves existing financial records and queued jobs; an instrumentation test opens an encrypted schema-1 database and verifies Room migration and retained data. Every subsequent schema change requires another explicit tested migration. Destructive fallback is forbidden.
+Room schema export is configured through KSP. Current schema 3 adds the planning tables, allocation view and category hierarchy via MIGRATION_2_3. Historical MIGRATION_1_2 adds statement warning JSON and durable review choices. Encrypted tests open both older schemas and verify retained data through the current schema. Every subsequent schema change requires another explicit tested migration. Destructive fallback is forbidden.
 
 Release optimization/R8 is enabled. [Keep rules](app/src/main/keepRules/rules.keep) preserve Gson DTOs and Room data records. The optional PDFBox JPEG2000 decoder is omitted because imports extract text without decoding images.
 
@@ -110,7 +111,7 @@ SHA-256 supplies stable identities/fingerprints, not source authenticity. Accoun
 
 ## Database schema and persistence
 
-[Exported schema 2](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/2.json) (with [schema 1](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/1.json) retained for migration tests) records exact fields, indices and foreign keys. Entities.kt is the readable model.
+[Exported schema 3](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/3.json) (with [schema 1](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/1.json) retained for migration tests) records exact fields, indices and foreign keys. Entities.kt and PlanningEntities.kt are the readable models. Schemas 1 and 2 remain migration fixtures.
 
 | Table | Ownership, content and constraints |
 | --- | --- |
@@ -129,6 +130,13 @@ SHA-256 supplies stable identities/fingerprints, not source authenticity. Accoun
 | refund_links | Original/credit IDs and linked amount; each refund ID appears once. |
 | settings | Local key/value preferences. |
 | import_jobs | Transient encrypted text, filename/hash/account, state, parsed result/error, creation time and durable previewToken/resolutionsJson; excluded from backup. |
+| balance_checkpoints | Dated account openings, manual/statement provenance and explicit conflict selection. |
+| allocations / effective_allocations (view) | Exact category allocations and legacy single-category fallback; personal attribution only. |
+| transfer_pairs | Explicit equal-value debit/credit links between owned accounts. |
+| budget_exclusions | Transaction-level exclusions that affect budgets only. |
+| budgets / budget_revisions | Scope, start/end months and effective-dated base/rollover/cap revisions. |
+| budget_periods / budget_coverage | Monthly snapshots, historical category coverage and recomputable carry/spending amounts. |
+| budget_alerts | Per-budget/month/threshold delivery acknowledgement; rebuilt after restore. |
 
 Transaction indices cover account, date, reference and verification; metadata indexes category. Events and import fingerprints have uniqueness constraints. Some conceptual relationships are checked by repository/backup validation rather than SQL foreign keys.
 
@@ -138,15 +146,15 @@ Manual creation also records MANUAL observation/evidence. Only unverified, unlin
 
 History uses bounded 50-row offset queries with account, direction, source, category, verification, hidden, date, amount and local text filters. LIKE terms are escaped; numeric searches convert rupees to paise. Dashboard totals aggregate in SQLite. Statement detail pages display 30 rows at a time, but their backing query loads that import's rows; imports/review lists also lack database pagination.
 
-The schema intentionally separates status/metadata rather than reproducing every suggested field literally. Outstanding fields and behavior are tracked in leftout.md, including separate reference types, evidence confidence/audit fields, category icons, and optional metadata.
+The schema intentionally separates status/metadata rather than reproducing every suggested field literally. Outstanding fields and behavior are tracked in leftout.md, including separate reference types, evidence confidence/audit fields, and optional metadata; category icons are now implemented.
 
 ## Screens and state management
 
-TrackerApp provides Home, Transactions, Insights, Statements and Settings tabs. A shared top-level navigation helper pops to Home and opens the selected root with singleTop, without restoring nested tab stacks. Home always opens Home; system Back from any other top-level tab returns Home, and secondary routes return to their origin. Reporting preferences use AnalyticsViewModel SavedStateHandle; route filters survive saved-instance-state restoration. Categories is a secondary Settings route. Secondary routes include transaction add/edit/detail, accounts, Needs Review, rules, mandates and backup. Search is embedded in Transactions; security controls are in Settings.
+TrackerApp provides Home, Transactions, Plan, Insights and Settings tabs. Statements is accessible from Home and Settings. A shared top-level navigation helper pops to Home and opens the selected root with singleTop, without restoring nested tab stacks. Home always opens Home; system Back from any other top-level tab returns Home, and secondary routes return to their origin. Reporting preferences use AnalyticsViewModel SavedStateHandle; route filters survive saved-instance-state restoration. Categories is a secondary Settings route. Secondary routes include transaction add/edit/detail, accounts, Needs Review, rules, mandates and backup. Search is embedded in Transactions; security controls are in Settings.
 
-TrackerViewModel owns account/filter/month/grouping StateFlows, reactive repository subscriptions, busy/error state, statement preview/resolutions and backup preview. Startup waits for the first real account query before selecting onboarding, avoiding a returning user's form disappearing during initial load. Action errors reach a Snackbar; cancellation is preserved. The global progress indicator reserves its height so asynchronous writes do not move active controls.
+TrackerViewModel owns account/history-filter/budget-month StateFlows, reactive repository subscriptions, busy/error state, statement preview/resolutions and backup preview. Startup waits for the first real account query before selecting onboarding, avoiding a returning user's form disappearing during initial load. Action errors reach a Snackbar; cancellation is preserved. The global progress indicator reserves its height so asynchronous writes do not move active controls.
 
-Account onboarding explains local privacy and collects nickname/last4/type without login. Additional accounts can be created. Settings → Manage SBI accounts provides permanent local account deletion with a named, masked-account confirmation and backup reminder. Account editing/deactivation is not exposed.
+Account onboarding explains local privacy and collects nickname/last4/type without login. Additional accounts can be created. Settings → Manage SBI accounts provides permanent local account deletion with a named, masked-account confirmation and backup reminder. Nickname/type editing and archive/reactivate controls are available. Archival preserves history and pauses automatic account assignment; permanent deletion is guarded for accounts with planning records.
 
 AccountScreen calls TrackerViewModel.deleteAccount, then LedgerRepository.deleteAccount performs ordered SQL cleanup in one Room transaction: associated review decisions (including ignored statement rows and revisions), linked observations/evidence, refund links, mandates, statement imports/rows, pending import jobs, transactions/metadata/tag links, then the account. It uses internal IDs, never last-four matching. Shared categories, tags, rules, settings, other accounts and observations without established ownership remain. Existing exported backups are unchanged; restoring an older backup can recover deleted records. This operation does not close or modify the actual bank account. Individual verified-transaction deletion restrictions still apply outside this explicit whole-account erasure.
 
@@ -228,7 +236,7 @@ No application INTERNET, READ_SMS, broad storage, contacts, location, camera, mi
 
 ## Encrypted backup and restore
 
-BackupSnapshot version 3 (restoring versions 1, 2 and 3) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links and settings. Transient import jobs and device/signing keys are excluded.
+BackupSnapshot version 4 (restoring versions 1–4) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links and settings. Transient import jobs and device/signing keys are excluded.
 
 BackupCrypto format ETBACK01 uses magic/header bytes, PBKDF2-HMAC-SHA256 with 600,000 iterations, fresh 16-byte salt, fresh 12-byte nonce and AES-256-GCM. The complete header is authenticated as AAD. Exports require a password of at least 12 characters. The derived key is independent of Android Keystore, permitting portable recovery.
 
@@ -236,7 +244,7 @@ BackupService snapshots Room transactionally, serializes with Gson in process me
 
 Statement warning JSON and review-decision revisions are included in backups. Old archives without warning JSON remain readable; warnings can be reconstructed from official rows. Validation also checks statement dates, sequence, linked financial facts and decision targets.
 
-[BackupArchive.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupArchive.kt) authenticates the entire file before parsing without needing a database or device key. It requires every collection and non-null field, checks primitive types and exact integer ranges before Gson conversion, and supports archive versions 1/2/3. Theme preference is an allowlisted dark/light/system value; missing legacy preferences render dark. Older APKs reject version-3 archives. BackupValidation plus [BackupRelations.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupRelations.kt) check IDs, accounts, enums, money/dates, ownership, evidence/source/observation consistency, statement assignment and reconciliation status, decision origins, mandate status, rule syntax, allowed settings and refund bounds. Unreadable pre-existing observation JSON may be preserved only as an unattached quarantined review record. OTP/PIN content is rejected. Historical statement balance exceptions remain valid archive data.
+[BackupArchive.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupArchive.kt) authenticates the entire file before parsing without needing a database or device key. It requires every collection and non-null field, checks primitive types and exact integer ranges before Gson conversion, and supports archive versions 1/2/3/4. Theme preference is an allowlisted dark/light/system value; missing legacy preferences render dark. Older APKs reject archives newer than their supported version. BackupValidation plus [BackupRelations.kt](app/src/main/java/com/kiz9r/expense_tracker/backup/BackupRelations.kt) check IDs, accounts, enums, money/dates, ownership, evidence/source/observation consistency, statement assignment and reconciliation status, decision origins, mandate status, rule syntax, allowed settings and refund bounds. Unreadable pre-existing observation JSON may be preserved only as an unattached quarantined review record. OTP/PIN content is rejected. Historical statement balance exceptions remain valid archive data.
 
 Restore is available directly from onboarding without creating a placeholder account, as well as Settings. Preview shows date, masked account names and record counts before explicit replacement confirmation. Changing the selected file, leaving the screen or cancelling clears the preview; an epoch check prevents a late inspection result from reviving a cancelled preview. Passwords rejected while another action is busy are cleared too.
 
@@ -258,7 +266,7 @@ HistoryFilter/DAO support exact merchant, channel, category-key sets, weekday, f
 
 History uses a LazyColumn and a bounded 150-row SQL window, advancing by 50 rows near its end while stable transaction IDs preserve the overlapping scroll anchor. A control loads earlier windows. Search persists across tabs; filters move to a sheet. Date headers and icon/status text replace the old page layout. Forms put amount first, use native date/time selection and disclose optional notes/tags. Details separate amount/status, personal metadata, tracking actions and source evidence. Categories link to exact history. Statement screens retain their bounded review pages, persisted decisions and summaries with a staged import header.
 
-The existing settings table stores theme_mode, so Room remains schema 2. Backups export version 3, accept versions 1–3, preserve explicit themes and default missing legacy themes to dark. No device-specific key or SMS permission behavior changes.
+The existing settings table stores theme_mode. Room is now schema 3 for planning records. Backups export version 4, accept versions 1–4, preserve explicit themes and default missing legacy themes to dark. Device-specific keys and permissions are not exported.
 
 Verification is tracked in leftout.md and the dated VALIDATION.md entry. AnalyticsTest checks leap/comparison/preset/bucket boundaries and signed values. AnalyticsIntegrationTest checks exclusions, multiple evidence, exact drilldowns, theme/legacy replacement and 20,000 transactions over five years. RedesignUiTest checks navigation/search preservation and can capture synthetic dark/light/large-font screens with the v14_visual instrumentation argument. Physical-phone/TalkBack and Android 11 behavior still require separate evidence.
 
@@ -302,12 +310,12 @@ Release signing loads private, gitignored signing.properties and personal-releas
 [leftout.md](leftout.md) owns the detailed current backlog, requirement mapping and all 12 acceptance scenarios. Key boundaries are:
 
 - SBI Relationship Summary is validated against the supplied encrypted sample. Other PDF layouts and SMS/provider formats need further coverage. CSV/XLSX and other notification providers are deferred; scanned-PDF OCR is outside the approved MVP.
-- Basic schema and UI omit some requested refinements: category icons, separate reference types/audit fields, custom description/favorite metadata, history date group headings, full mandate lifecycle and richer rule suggestions.
+- Basic schema and UI omit some requested refinements: separate reference types/audit fields, custom description/favorite metadata, full mandate lifecycle and richer rule suggestions.
 - Reconciliation preserves official rows, durable review choices and detailed exceptions. Unchanged previews resume choices; changed candidates require fresh review. Balance discrepancies cannot be dismissed.
-- Account rename/type editing/deactivation, refund selection by merchant/date instead of local ID, multi-year performance and backup memory behavior need further work or validation.
+- Refund selection by merchant/date instead of local ID, physical-device multi-year performance and large-backup memory behavior need further work or validation. Accounts with planning history use archival; expanded permanent deletion remains guarded.
 - Android 11/physical biometrics, permission denial/revocation, reboot/background restrictions, TalkBack/large fonts, physical recovery and phone uninstall/reinstall/update paths remain unverified.
-- Migration 1 to 2 has an encrypted integration test; future migrations also need tests when the schema changes. Current lint warnings remain recorded; passing builds are not release readiness.
-- Cloud, other banks/cards/currencies, family profiles and advanced analysis beyond the defined roadmap remain future scope. Budgets, local payment planning, balances and forecasts are now planned under requirements sections 74–82; they are not implemented by this documentation update. Payment execution, credential/OTP collection, bank-login scraping and screen monitoring remain intentionally excluded.
+- Encrypted migrations 1→2→3 and 2→3 have passing integration tests. Current lint warnings remain recorded; passing builds alone do not establish physical-device or release readiness.
+- Cloud, other banks/cards/currencies, family profiles and advanced analysis beyond the defined roadmap remain future scope. Balances and budgets are implemented under §83; local payment planning and forecasts remain later stages. Payment execution, credential/OTP collection, bank-login scraping and screen monitoring remain intentionally excluded.
 
 Maintain this root document and leftout.md together whenever implementation or verification changes. Do not recreate package-level development documents.
 
@@ -315,14 +323,38 @@ Maintain this root document and leftout.md together whenever implementation or v
 
 ScreenshotDebugPreference enables the existing screenshots setting once after successful initialization. Its screenshots_enabled_v141 acknowledgement lives in installation-local debug_display_preferences, outside financial backups; a mutex serializes initialization. Database write precedes a checked durable preference commit. Later user changes and restored screenshot preferences are respected. MainActivity keeps FLAG_SECURE during startup/recovery, while locked and while the preference is unavailable; unlocked ordinary screens/dialogs allow capture when enabled. A one-time snackbar explains the setting. No schema or archive version change is introduced.
 
-NavigationFixTest covers the two ₹1 movements, independent summary/category history, tab-root navigation, system Back, visible range filters and saved drilldown restoration. AnalyticsIntegrationTest adds ordinary-credit/refund/negative-total and one-time screenshot upgrade tests. DisplayPolicyTest covers protected states and human-readable filters. ScreenshotWindowTest verifies the real activity flag, capture and disabled preference across recreation. Build/test and signed update results will be recorded in VALIDATION.md after execution.
+NavigationFixTest covers the two ₹1 movements, independent summary/category history, tab-root navigation, system Back, visible range filters and saved drilldown restoration. AnalyticsIntegrationTest adds ordinary-credit/refund/negative-total and one-time screenshot upgrade tests. DisplayPolicyTest covers protected states and human-readable filters. ScreenshotWindowTest verifies the real activity flag, capture and disabled preference across recreation. The final unit/Android/lint checks pass; signed update is blocked by the retained APK's different key. See the 2 October VALIDATION.md record.
 
 ## Planned financial-manager expansion
 
-Documentation scope updated **2 October 2026**; the implementation audit date above is unchanged. [Requirements sections 74–82](requirements.md#74-financial-manager-expansion-scope) define the expansion and FM01–FM12 acceptance scenarios. [leftout.md](leftout.md) tracks it under F063–F069. This section describes future design constraints, not existing code or executed tests.
+Roadmap established **2 October 2026**; the first two stages are now implemented as described below. [Requirements sections 74–82](requirements.md#74-financial-manager-expansion-scope) define the expansion and FM01–FM12 acceptance scenarios. [leftout.md](leftout.md) tracks it under F063–F069. This section records the broader design direction; the following section distinguishes implemented foundations/budgets from future schedules and forecasts.
 
 Build on the existing canonical ledger and repositories: add category hierarchy/split allocations, dated balance checkpoints and paired transfers first; monthly budget periods/rollover second; payment schedules, occurrences and actual-settlement links third; forecasts and projected-shortfall alerts fourth. Keep planning records distinct from actual transactions. Split allocations must sum exactly to the canonical amount. Budget periods retain original allocations/rules while late financial facts recalculate dependent rollover deterministically.
 
 Balance calculations include hidden posted movements and owned transfers, unlike spending analytics. Expose bank-reported, calculated and projected figures with source/time/completeness. A checkpoint must not count its included movements again. Plans affect forecasts until settled by actual transactions; partial settlements reduce only the unpaid remainder. Forecast everyday spending excludes commitments already represented in schedules. Reminders never execute payments.
 
-Planned Home/Plan/Insights flows will expose these differences and preserve current reconciliation/history access. New records require explicit, non-destructive Room migrations, validated backup relationships, older-archive defaults and a versioned archive extension. No new schema, backup version, dependencies, packages or runtime behavior were introduced here. Complete outstanding v1.4.1 verification before expansion delivery; future implementation must supply FM01–FM12 evidence and retain existing acceptance coverage.
+Planned Home/Plan/Insights flows will expose these differences and preserve current reconciliation/history access. New records require explicit, non-destructive Room migrations, validated backup relationships, older-archive defaults and a versioned archive extension. The preceding section records the earlier documentation-only roadmap; current implementation work is described below.
+
+## v1.5.0 foundations and budgets
+
+The approved first release is requirements §83. Foundations and budgets are implemented. Automated verification is recorded in VALIDATION.md; release sign-off is blocked by the retained APK's different signer. Room schema 3 adds balance checkpoints, split allocations, transfer pairs, budget exclusions, budgets/revisions/periods/coverage and alert-delivery records. Existing categories receive nullable parentId, icon and archived fields without reassignment. MIGRATION_2_3 and the effective_allocations SQL view preserve legacy single-category records; the view is shared by category analytics, filtered history and budget calculations.
+
+The planning package contains BalanceRepository (checkpoint-backed daily aggregates and separately displayed SMS balances), ClassificationRepository (hierarchy/splits/account maintenance/confirmed transfers), BudgetRepository (monthly snapshots, scope checks and deterministic recalculation), PlanningMath (checked paise arithmetic, proportional refund allocation and thresholds), and BudgetAlertRepository/BudgetAlertWorker (baseline, deduplication, stale notification removal and background checks). These reuse encrypted Room and existing canonical transactions. Reconciled statements are backfilled idempotently as next-day opening checkpoints; conflicting same-date checkpoints require selection. Balance trends currently expose the latest twelve months through the existing accessible chart controls.
+
+PlanningScreens, ClassificationScreens and BudgetNotificationSettings supply the native UI. Home retains the three spending figures and adds account/budget summaries; Plan replaces the Statements bottom tab. Statements remains a secondary route from Home/Settings. Account archives preserve history and pause automatic assignment. Split and budget drilldowns show contribution amounts separately from full transactions. New budget defaults are combined-account scope and no rollover. Receiving-period revisions control incoming carry, and current-month adjustment previews are computed by the same repository as final calculations.
+
+BackupSnapshot/BackupArchive/PlanningBackupValidation support version 4 with version 1–3 defaults and validate hierarchy, allocation sums, ownership, checkpoint sources, transfer pairs and budget relationships before replacement. Planning records are included; delivery markers are rebuilt and push notifications are disabled after restore. Database migrations are registered in EncryptedLedger, including recovery staging.
+
+MainActivity now calculates window protection during composition so completion of screenshot initialization actually re-applies FLAG_SECURE. The real-window test passes in the final full suite after this fix. RedesignUiTest uses a valid multi-category synthetic fixture. PlanningMathTest and PlanningIntegrationTest cover arithmetic and new repository invariants; PlanningUiTest and PlanningMigrationTest extend UI and encrypted upgrade checks. Executed evidence is recorded in VALIDATION.md. At font scaling above 150%, bottom tabs retain named icons for accessibility and omit crowded visible labels; the app bar identifies the current screen.
+
+Implementation deviation: automatic approval review rejected widening permanent account deletion to remove planning records. LedgerRepository now guards accounts with checkpoints, allocations, paired transfers, exclusions or account-specific budgets and directs users to archive them. Existing account deletion without those records is retained. This limitation must be visible in README/leftout.md and must not be bypassed through alternate deletion paths.
+
+
+
+Final 2 October verification: 59 JVM passes/1 optional skip; Android runner 88 reported (85 passes/3 optional skips), plus a separate passing visual capture test; lint 0 errors/31 warnings. The five-year/20,000-transaction workload passes. Final dark/light/200% font captures are in build/v150-final-visuals. The candidate signer (cae7c0c8…) differs from retained v1.4.1 (a3379a4b…); Android refused the in-place update. The original signing configuration and a completed update/cold-launch check are required before delivery. See VALIDATION.md for exact hashes and limits.
+
+## IDE inspection cleanup — 2 October 2026
+
+The settings lookup quotes the existing `key` column and uses `:settingKey`; no schema or data changes are needed. TrackerViewModel and AnalyticsViewModel require the framework-provided SavedStateHandle; manual UI test fixtures supply their own explicitly. The obsolete CategoriesScreen and unused legacy analytics state/imports were removed; ClassificationScreens remains the active category editor. Hilt context qualifiers use explicit @param targets. Coroutine waits use Duration values and Android test schema assets use the Gradle directories API.
+
+The manifest retains opt-in RECEIVE_SMS for core incoming tracking. Only its SmsAndCallLogPolicy inspection is suppressed, with a comment limiting the exception to this personal sideloaded APK and requiring reassessment before Play Store distribution. The redundant activity label is removed; it inherits the unchanged application label. Build/tests and remaining lint findings are recorded in VALIDATION.md. No blanket warning suppression or financial behavior change was introduced.

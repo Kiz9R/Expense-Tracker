@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import org.junit.*
 import org.junit.Assert.*
 import java.io.File
+import kotlin.time.Duration.Companion.milliseconds
 
 class BackupRecoveryTest {
     private val context=ApplicationProvider.getApplicationContext<Context>()
@@ -20,7 +21,7 @@ class BackupRecoveryTest {
     private lateinit var service: BackupService
     private var onAccountDelete: (() -> Unit)?=null
     @Before fun setup(){ db=Room.inMemoryDatabaseBuilder(context,LedgerDatabase::class.java)
-        .setQueryCallback({ sql,_ -> if(sql=="DELETE FROM accounts")onAccountDelete?.invoke() },java.util.concurrent.Executor {it.run()}).build();service=BackupService(context,db,Gson()) }
+        .setQueryCallback({ sql,_ -> if(sql=="DELETE FROM accounts")onAccountDelete?.invoke() },{it.run()}).build();service=BackupService(context,db,Gson()) }
     @After fun close(){db.close()}
     @Test fun everyRecordSurvivesEncryptedExportInspectAndReplacement()=runBlocking {
         val fixture=completeBackupFixture();validateBackup(fixture);service.restore(fixture)
@@ -82,7 +83,7 @@ class BackupRecoveryTest {
         val writer=launch(Dispatchers.IO){db.withTransaction {entered.complete(Unit);release.await()}}
         entered.await()
         val restore=launch(Dispatchers.IO){service.restore(completeBackupFixture().copy(accounts=completeBackupFixture().accounts.map {it.copy(nickname="replacement")}))}
-        delay(100);restore.cancel();release.complete(Unit);writer.join();restore.join()
+        delay(100.milliseconds);restore.cancel();release.complete(Unit);writer.join();restore.join()
         assertEquals(before,backupDigest(service.snapshot()))
     }
     @Test fun inconsistentFinancialRecordsAndMissingFieldsAreRejectedBeforeReplacement()=runBlocking {
@@ -103,7 +104,8 @@ class BackupRecoveryTest {
         json.getAsJsonArray("transactions")[0].asJsonObject.remove("amountMinor")
         assertTrue(runCatching {BackupArchive.decode(json.toString().toByteArray(),Gson())}.isFailure)
         assertEquals(before,backupDigest(service.snapshot()))
-        assertEquals(backupDigest(good.copy(version=1)),backupDigest(BackupArchive.decode(Gson().toJson(good.copy(version=1)).toByteArray(),Gson())))
+        val legacy=good.copy(version=1,checkpoints=emptyList())
+        assertEquals(backupDigest(legacy),backupDigest(BackupArchive.decode(Gson().toJson(legacy).toByteArray(),Gson())))
     }
     @Test fun notificationIntakeRechecksRestoredOptInInsideItsWriteTransaction()=runBlocking {
         service.restore(completeBackupFixture())

@@ -36,7 +36,7 @@ class BackupUiTest {
         try {
             lateinit var vm:TrackerViewModel
             compose.setContent {
-                vm=androidx.compose.runtime.remember {TrackerViewModel(ledger,rec,SaveManualTransaction(ledger),PdfTextExtractor(context),service,StatementJobs(context,db,gson))}
+                vm=androidx.compose.runtime.remember {TrackerViewModel(ledger,rec,SaveManualTransaction(ledger),PdfTextExtractor(context),service,StatementJobs(context,db,gson),androidx.lifecycle.SavedStateHandle())}
                 ExpensetrackerTheme {TrackerApp(vm)}
             }
             compose.waitUntil(15000){compose.onAllNodesWithTag("accounts.restore").fetchSemanticsNodes().isNotEmpty()}

@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 const val ITEM_QUERY = """SELECT t.*, COALESCE(NULLIF(m.merchantDisplay, ''), t.merchantOriginal) AS displayName,
     c.name AS categoryName, m.categoryId AS categoryId, COALESCE(m.notes,'') AS notes,
-    COALESCE(m.hidden,0) AS hidden, a.nickname AS accountName, a.last4 AS accountLast4
+    COALESCE(m.hidden,0) AS hidden, a.nickname AS accountName, a.last4 AS accountLast4, NULL AS allocationMinor
     FROM transactions t JOIN accounts a ON a.id=t.accountId
     LEFT JOIN metadata m ON m.transactionId=t.id LEFT JOIN categories c ON c.id=m.categoryId """
 @Dao
@@ -39,19 +39,27 @@ interface LedgerDao {
     @Upsert suspend fun saveTransaction(value: TransactionEntity)
     @Query("SELECT * FROM transactions WHERE id=:id") suspend fun transaction(id: String): TransactionEntity?
     @Query("SELECT * FROM transactions WHERE accountId=:accountId AND (reference=:reference AND :reference != '' OR date BETWEEN :start AND :end)") suspend fun candidates(accountId: String, reference: String, start: String, end: String): List<TransactionEntity>
-    @Query(ITEM_QUERY + """WHERE (:accountId IS NULL OR t.accountId=:accountId)
+    @Query("""SELECT t.*,COALESCE(NULLIF(m.merchantDisplay,''),t.merchantOriginal) AS displayName,c.name AS categoryName,
+      m.categoryId,COALESCE(m.notes,'') AS notes,COALESCE(m.hidden,0) AS hidden,a.nickname AS accountName,a.last4 AS accountLast4,
+      CASE WHEN :category IS NOT NULL OR :categoryCount>0 THEN (
+        SELECT SUM(e.amountMinor) FROM effective_allocations e LEFT JOIN categories ec ON ec.id=e.categoryId
+        WHERE e.transactionId=t.id AND (:category IS NULL OR e.categoryId=:category OR ec.parentId=:category)
+        AND (:categoryCount=0 OR COALESCE(e.categoryId,'') IN (:categoryKeys) OR ec.parentId IN (:categoryKeys))
+      ) ELSE NULL END AS allocationMinor
+      FROM transactions t JOIN accounts a ON a.id=t.accountId LEFT JOIN metadata m ON m.transactionId=t.id
+      LEFT JOIN categories c ON c.id=m.categoryId WHERE (:accountId IS NULL OR t.accountId=:accountId)
       AND (:showHidden OR COALESCE(m.hidden,0)=0)
       AND (NOT :eligible OR (COALESCE(m.hidden,0)=0 AND t.outcome!='FAILED' AND t.ownedTransfer=0))
       AND (:merchant IS NULL OR COALESCE(NULLIF(m.merchantDisplay,''),t.merchantOriginal)=:merchant)
       AND (:channel IS NULL OR t.channel=:channel)
-      AND (:categoryCount=0 OR COALESCE(m.categoryId,'') IN (:categoryKeys))
+      AND (:categoryCount=0 OR EXISTS(SELECT 1 FROM effective_allocations e LEFT JOIN categories ec ON ec.id=e.categoryId WHERE e.transactionId=t.id AND (COALESCE(e.categoryId,'') IN (:categoryKeys) OR ec.parentId IN (:categoryKeys))))
       AND (:weekday='' OR strftime('%w',t.date)=:weekday)
       AND (:metric='ALL' OR (:metric='DEBIT' AND t.direction='DEBIT')
         OR (:metric='REFUNDS' AND t.direction='CREDIT' AND t.kind IN ('REFUND','REVERSAL'))
         OR (:metric='INCOME' AND t.direction='CREDIT' AND t.kind NOT IN ('REFUND','REVERSAL'))
         OR (:metric='NET' AND (t.direction='DEBIT' OR (t.direction='CREDIT' AND t.kind IN ('REFUND','REVERSAL')))))
       AND (:direction='' OR t.direction=:direction) AND (:verification='' OR t.verification=:verification)
-      AND (:category IS NULL OR m.categoryId=:category) AND t.date BETWEEN :start AND :end
+      AND (:category IS NULL OR EXISTS(SELECT 1 FROM effective_allocations e LEFT JOIN categories ec ON ec.id=e.categoryId WHERE e.transactionId=t.id AND (e.categoryId=:category OR ec.parentId=:category))) AND t.date BETWEEN :start AND :end
       AND t.amountMinor BETWEEN :minAmount AND :maxAmount
       AND (:source='' OR EXISTS(SELECT 1 FROM evidence e WHERE e.transactionId=t.id AND e.source=:source))
       AND (:query='' OR t.merchantOriginal LIKE :query ESCAPE '\' OR m.merchantDisplay LIKE :query ESCAPE '\'
@@ -105,7 +113,7 @@ interface LedgerDao {
     @Query("SELECT COALESCE(SUM(amountMinor),0) FROM refund_links WHERE originalId=:id") suspend fun refundedAmount(id: String): Long
     @Upsert suspend fun saveSetting(value: SettingEntity)
     @Query("SELECT * FROM settings") fun settings(): Flow<List<SettingEntity>>
-    @Query("SELECT value FROM settings WHERE key=:key") suspend fun setting(key: String): String?
+    @Query("SELECT value FROM settings WHERE `key`=:settingKey") suspend fun setting(settingKey: String): String?
     @Query("""SELECT COALESCE(SUM(CASE WHEN t.direction='DEBIT' THEN t.amountMinor ELSE 0 END),0) AS spend,
       COALESCE(SUM(CASE WHEN t.direction='CREDIT' AND t.kind NOT IN ('REFUND','REVERSAL') THEN t.amountMinor ELSE 0 END),0) AS income,
       COALESCE(SUM(CASE WHEN t.direction='CREDIT' AND t.kind IN ('REFUND','REVERSAL') THEN t.amountMinor ELSE 0 END),0) AS refunds,

@@ -9,9 +9,6 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.ui.Alignment
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,6 +52,8 @@ import com.kiz9r.expense_tracker.domain.*
             vm.action { vm.ledger.setTheme(mode) }
         }
         Heading("Your workspace")
+        OutlinedButton(onClick={navigate("statements")},modifier=Modifier.fillMaxWidth().testTag("settings.statements")){Text("Statements & reconciliation")}
+        OutlinedButton(onClick={navigate("balances")},modifier=Modifier.fillMaxWidth().testTag("settings.balances")){Text("Account balances")}
         OutlinedButton(onClick={navigate("categories")},modifier=Modifier.fillMaxWidth().testTag("settings.categories")){Text("Categories")}
         
         OutlinedButton(onClick={navigate("accounts")},modifier=Modifier.fillMaxWidth().testTag("settings.accounts")){Text("Manage SBI accounts")}
@@ -97,30 +96,6 @@ import com.kiz9r.expense_tracker.domain.*
         Toggle("Allow screenshots on financial screens",enabled("screenshots"),"settings.screenshots"){vm.setting("screenshots",it)}
         Notice("Uninstalling removes this device's ledger. Export an encrypted backup first and keep its password somewhere safe.")
         Text("No cloud sync, ads, bank login, payment initiation, or financial-data network access.",style=MaterialTheme.typography.bodySmall)
-    }
-}
-@Composable fun CategoriesScreen(vm: TrackerViewModel,history: (String)->Unit = {}) {
-    val categories by vm.categories.collectAsStateWithLifecycle()
-    var name by rememberSaveable {mutableStateOf("")}
-    var editId by rememberSaveable {mutableStateOf<String?>(null)}
-    Screen("categories") {
-        Heading("Categories")
-        Field(name,{name=it},if(editId==null) "New category" else "Rename category","categories.form.name")
-        Button(onClick={vm.action("Category saved."){vm.ledger.category(editId,name);name="";editId=null}},
-            modifier=Modifier.testTag("categories.save")){Text(if(editId==null) "Add category" else "Save rename")}
-        if(editId!=null) TextButton(onClick={editId=null;name=""}){Text("Cancel")}
-        categories.forEach { category ->
-            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick={history(category.id)},modifier=Modifier.weight(1f).heightIn(min=48.dp).testTag("categories.items."+category.id+".history")) {
-                    Icon(Icons.Outlined.Label,null,Modifier.size(18.dp));Spacer(Modifier.width(12.dp));Text(category.name,Modifier.weight(1f))
-                }
-                if(!category.system) {
-                    TextButton(onClick={editId=category.id;name=category.name}){Text("Rename")}
-                    TextButton(onClick={vm.action("Category removed."){vm.ledger.deleteCategory(category.id)}}){Text("Delete")}
-                }
-            }
-        }
-        Notice("Tap a category to see its history. Only unused custom categories can be deleted.")
     }
 }
 @Composable fun RulesScreen(vm: TrackerViewModel) {

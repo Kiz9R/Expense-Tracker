@@ -2,11 +2,11 @@
 
 A native Android personal expense ledger built with Kotlin, Compose, Room/SQLCipher, Hilt and WorkManager. All normal operation is offline. There is no payment initiation, banking login, analytics SDK or application network permission.
 
-The planned next direction is a **personal financial manager**, extending the existing ledger with budgets, balances and payment planning. The app name and currently shipped capabilities remain unchanged. See the roadmap below and [requirements sections 74–82](requirements.md#74-financial-manager-expansion-scope) for the planned behavior.
+The app is evolving into a **personal financial manager**. Version 1.5.0/code 8 implements foundations and budgets. Release delivery is blocked by a signing-key mismatch with the retained v1.4.1 APK; do not uninstall your current app to work around it. The broader payment-planning/forecast roadmap remains future work. See [requirements section 83](requirements.md#83-financial-manager-first-release--approved-implementation), [leftout.md](leftout.md) and [dated validation](VALIDATION.md) for evidence and limitations.
 
 ## Planned financial-manager expansion
 
-Agreed direction, **2 October 2026**. The capabilities in this section are planned, not available-feature or release-validation claims.
+Agreed direction, **2 October 2026**. This table describes the broader roadmap. Categories, checkpoint balances and budgets are implemented in the v1.5.0 section below; schedules and forecasts remain planned.
 
 | Capability | Planned behavior |
 | --- | --- |
@@ -24,17 +24,30 @@ Agreed direction, **2 October 2026**. The capabilities in this section are plann
 
 **Plans and forecasts:** plans do not create posted transactions or execute payments. Actual payments link to planned occurrences, including partial/variable payments, so a payment detected by SMS and later verified by a statement is counted only once. Start with an explainable forecast: spending so far + remaining planned expenses + estimated remaining everyday spending. Exclude commitments already represented in the schedule from the everyday estimate. Forecast category totals must equal the overall forecast.
 
-**Experience:** Home will emphasize labelled balances, remaining budgets and upcoming payments. Insights retains detailed analysis; a dedicated Plan area will hold budgets and schedules. Final navigation placement will be designed without losing access to statements or predictable Home/Back behavior.
+**Experience:** Home shows labelled balances and remaining budgets. Insights retains detailed analysis, and Plan contains budgets. Upcoming payments and schedules will follow. Statements remain available from Home and Settings.
 
 Delivery order:
 
-1. Finish outstanding v1.4.1 verification and signed-update checks.
-2. Add reliable balances, account maintenance, paired transfers, richer categories and transaction splits.
-3. Add monthly budgets, carry-forward and budget alerts.
+1. v1.4.1 automated regressions now pass; the original signing key is still required for update verification.
+2. Implemented: checkpoint balances, account maintenance, paired transfers, richer categories and splits.
+3. Implemented: monthly budgets, carry-forward and budget alerts; platform notification checks remain pending.
 4. Add payment/income schedules, upcoming-payment views, reminders and matching to actual payments.
 5. Add spending forecasts, projected balance trends and shortfall alerts.
 
-These changes require tested database migrations and an expanded, versioned encrypted backup format. Existing records, evidence, ingestion and reconciliation must survive updates. All planning remains offline and read-only with respect to banks; live bank access, payment execution, cloud services and AI forecasts are outside this expansion. No new version or delivery date is assigned yet. Track implementation separately in [leftout.md](leftout.md).
+These changes require tested database migrations and an expanded, versioned encrypted backup format. Existing records, evidence, ingestion and reconciliation must survive updates. All planning remains offline and read-only with respect to banks; live bank access, payment execution, cloud services and AI forecasts are outside this expansion. The foundations/budgets target is v1.5.0/code 8; later stages have no assigned release date. Track implementation separately in [leftout.md](leftout.md).
+
+## Financial-manager foundations and budgets (v1.5.0)
+
+- Bottom tabs are Home, Transactions, Plan, Insights and Settings. Open Statements from Home or Settings.
+- **Balances:** open Settings → Account balances, import a reconciled statement or add an opening balance. A manual opening is the balance before all movements on its date. Calculations include hidden transactions and transfers, exclude failed/future entries, and show source/date and provisional-data warnings. Conflicting checkpoints require selection. SMS-reported balances are displayed separately. None is a guarantee of live bank availability. Historical charts cover up to twelve months with exact accessible values.
+- **Categories:** keep existing assignments, add two-level groups and icons, and archive categories in use. Transaction details offer exact split allocations; category charts/history show allocated amounts separately from full transaction amounts.
+- **Transfers:** explicitly pair equal debit/credit movements in different owned accounts from transaction details. Both movements remain; fees stay separate. Unpairing retains transfer classification until changed.
+- **Budgets:** open Plan → Create monthly budget. Default scope is all accounts and rollover is OFF. Choose surplus-only, an optional positive carry cap, or surplus/deficit carry. Budgets include existing current-month spending with no proration. Account-specific budgets are available; overlapping category/account coverage is rejected.
+- Each receiving month’s rollover rule determines incoming carry. Changes default to next month; current-month adjustments show a preview. Late transactions/refunds recalculate subsequent carry without changing historical base allocations. A budget exclusion changes neither bank balance nor ordinary analytics.
+- Budget push alerts are opt-in, use private notification content and establish an initial baseline. In-app thresholds remain available without notification permission; Android may delay background notifications.
+- Account nickname/type editing and archive/reactivate preserve history. Accounts with new planning records cannot currently be permanently deleted; archive them instead. This guard follows automatic approval review rejecting irreversible cleanup of those records.
+
+Planned payments, due-date reminders, forecasts and projected-shortfall alerts are not included in v1.5.0. See the validation tracker before treating the build as release-ready.
 
 ## Implemented features
 
@@ -50,7 +63,7 @@ Current implementation gaps, experimental support and pending validation are tra
 - Keystore-wrapped SQLCipher key, optional biometric/device-credential lock and screenshot protection.
 - Portable password-encrypted backup, validation preview and transactional replacement restore.
 
-To remove an account, open **Settings → Manage SBI accounts → Delete**, then confirm the named account. This permanently deletes its local transactions, linked evidence, statements and pending imports, including verified and hidden records. Export an encrypted backup first if you need recovery. Other accounts, shared categories/tags/rules and unassigned observations remain. Existing backups are unchanged; your actual SBI bank account is unaffected. Deleting the final account returns to onboarding.
+For an account without planning history, open **Settings → Manage SBI accounts → Delete**, then confirm the named account. Accounts with checkpoints, splits, transfer pairs, budget exclusions or account-specific budgets must be archived instead. This permanently deletes its local transactions, linked evidence, statements and pending imports, including verified and hidden records. Export an encrypted backup first if you need recovery. Other accounts, shared categories/tags/rules and unassigned observations remain. Existing backups are unchanged; your actual SBI bank account is unaffected. Deleting the final account returns to onboarding.
 
 ## Setup and builds
 
@@ -86,7 +99,7 @@ Select this month, last month, the last 3/6/12 calendar months, or custom dates 
 
 History loads bounded windows as you scroll. Use its filter sheet for advanced criteria; chart drilldowns have independent filters. Entry forms use native date/time pickers and expandable notes/tags.
 
-Version 1.4 exports backup version 3 to include theme preferences. It restores versions 1–3, using dark when a legacy archive has no theme. Older APKs cannot read version-3 backups.
+Version 1.5 exports backup version 4, including checkpoints, allocations, transfer links and budgets. It restores versions 1–4; older archives retain their records and receive flat categories, empty planning data and dark theme if absent. Eligible statement checkpoints are reconstructed. Older APKs reject version-4 archives.
 
 ## SMS tracking
 
@@ -102,7 +115,7 @@ The supplied XML sample validates 299 SBI messages: 195 posted movements, 25 man
 2. Add manual entries or import a statement. Select the correct account before previewing a PDF.
 3. In Settings, optionally enable new-SMS tracking. Android may require granting SMS permission through its installer/runtime permission flow. Denying access leaves manual tracking and import available.
 4. Enable UPI notification tracking only if wanted, then grant notification access in Android Settings. Unknown accounts and ambiguous matches go to Needs Review.
-5. Enable app lock after configuring a device screen lock. Screenshot capture is blocked by default.
+5. Enable app lock after configuring a device screen lock. The debugging update enables screenshots once; change this under Settings → Security. Startup, locked and recovery screens remain protected.
 6. Export an encrypted backup before uninstalling or moving phones.
 
 ## PDF support and boundaries
@@ -135,7 +148,7 @@ SMS and notification formats differ across providers/releases. Included parsers 
 
 ## Backup and recovery
 
-Version-2 .etbackup snapshots (with version-1 restore compatibility) use AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations), with fresh salt/nonce and a minimum 12-character password. They are portable across installations and independent of Keystore keys.
+Version-4 .etbackup snapshots (with version 1–4 restore compatibility) use AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations), with fresh salt/nonce and a minimum 12-character password. They are portable across installations and independent of Keystore keys. Planning records are included; notification delivery markers are rebuilt and budget push notifications must be re-enabled after restore.
 
 To create a backup, open **Settings → Encrypted backup & restore**, enter and confirm a password of at least 12 characters, and save the .etbackup file outside the app's private storage. Keep its password separately. Validate the saved file before relying on it for recovery.
 
@@ -151,6 +164,6 @@ Backups are limited to 64 MB and remain in memory during processing. If export f
 
 One Gradle module with domain, data, ingestion, reconciliation, security, backup and ui/features packages. Read the single root [featureDevelopmentInfo.md](featureDevelopmentInfo.md) for architecture, file responsibilities, flows, dependencies, schema and limitations. Maintain it and the root [leftout.md](leftout.md) whenever implementation or verification changes, following [rules.md](rules.md). Do not create package-level development documents.
 
-Compose -> ViewModel/use case -> repository -> encrypted Room. Background services reuse the same repositories and matching engine. Screens never access a DAO. The exported version-2 schema and historical version 1 are in app/schemas. Migration 1 to 2 preserves existing data and has an encrypted integration test; future versions require explicit tested migrations.
+Compose -> ViewModel/use case -> repository -> encrypted Room. Background services reuse the same repositories and matching engine. Screens never access a DAO. The exported version-3 schema and historical versions 1–2 are in app/schemas. Explicit migrations 1→2→3 preserve records; encrypted upgrade tests cover both older versions.
 
 Tests cover deterministic parsers/matching, 120-row synthetic statements, duplicates/overlaps, concurrent ingestion, account suffix collisions, metadata preservation, failures/mandates, refunds, backup integrity/replacement, PDF passwords and a real Compose transaction flow with encrypted persistence. The root [synthetic-statement.txt](synthetic-statement.txt) is a fictional extracted-text fixture, not a real bank record or an importable PDF. Previously executed results remain in [VALIDATION.md](VALIDATION.md); [leftout.md](leftout.md) tracks current feature status, all requirement areas, the 12 acceptance scenarios and remaining checks.

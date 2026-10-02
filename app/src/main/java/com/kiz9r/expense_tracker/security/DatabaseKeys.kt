@@ -15,7 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class DatabaseKeys @Inject constructor(@ApplicationContext private val context: Context) {
+class DatabaseKeys @Inject constructor(@param:ApplicationContext private val context: Context) {
     fun activeDatabaseName(): String = context.getSharedPreferences("device_keys",Context.MODE_PRIVATE)
         .getString("active_database","ledger.db")!!.also(::validateName)
     private fun validateName(name: String) {

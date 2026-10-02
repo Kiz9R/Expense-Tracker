@@ -20,8 +20,8 @@ android {
         applicationId = "com.kiz9r.expense_tracker"
         minSdk = 30
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.4.1"
+        versionCode = 8
+        versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -50,7 +50,7 @@ android {
         compose = true
     }
     packaging { resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*") }
-    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    sourceSets.getByName("androidTest").assets.directories.add("$projectDir/schemas")
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 

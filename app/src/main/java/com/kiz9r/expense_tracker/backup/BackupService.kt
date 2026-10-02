@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.room.withTransaction
 import com.google.gson.Gson
 import com.kiz9r.expense_tracker.data.LedgerDatabase
-import com.kiz9r.expense_tracker.ingestion.readBytesLimited
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -13,7 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-class BackupService @Inject constructor(@ApplicationContext private val context: Context,
+class BackupService @Inject constructor(@param:ApplicationContext private val context: Context,
     private val db: LedgerDatabase, private val gson: Gson) {
     suspend fun snapshot(): BackupSnapshot = db.withTransaction {
         val dao = db.backup()
@@ -32,7 +31,11 @@ class BackupService @Inject constructor(@ApplicationContext private val context:
             reviewDecisions=dao.reviewDecisions(),
             mandates=dao.mandates(),
             refundLinks=dao.refundLinks(),
-            settings=dao.settings()
+            settings=dao.settings().filter{it.key!="budget_alert_baseline"},
+            checkpoints=db.planning().checkpoints(), allocations=db.planning().allocations(),
+            transferPairs=db.planning().pairs(), budgetExclusions=db.planning().exclusions(),
+            budgets=db.planning().budgets(), budgetRevisions=db.planning().revisions(),
+            budgetPeriods=db.planning().periods(), budgetCoverage=db.planning().coverage()
         )
     }
     suspend fun export(uri: Uri, password: CharArray) = withContext(Dispatchers.IO) {
@@ -59,6 +62,9 @@ class BackupService @Inject constructor(@ApplicationContext private val context:
             currentCoroutineContext().ensureActive()
             val dao = db.backup()
             db.ledger().clearJobs()
+            val planning=db.planning()
+            planning.clearAlerts(); planning.clearCoverage(); planning.clearPeriods(); planning.clearRevisions(); planning.clearBudgets()
+            planning.clearExclusions(); planning.clearPairs(); planning.clearAllocations(); planning.clearCheckpoints()
             dao.clearSettingEntity()
             dao.clearRefundLinkEntity()
             dao.clearMandateEntity()
@@ -89,6 +95,12 @@ class BackupService @Inject constructor(@ApplicationContext private val context:
             dao.insertMandateEntity(snapshot.mandates)
             dao.insertRefundLinkEntity(snapshot.refundLinks)
             dao.insertSettingEntity(snapshot.settings)
+            planning.checkpoints(snapshot.checkpoints); planning.allocations(snapshot.allocations); planning.pairs(snapshot.transferPairs)
+            planning.exclusions(snapshot.budgetExclusions); planning.budgets(snapshot.budgets); planning.revisions(snapshot.budgetRevisions)
+            planning.periods(snapshot.budgetPeriods); planning.coverage(snapshot.budgetCoverage)
+            com.kiz9r.expense_tracker.planning.BalanceRepository(db).backfill()
+            db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("budget_notifications","false"))
+            db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("budget_alert_baseline","false"))
             currentCoroutineContext().ensureActive()
             // Android permissions are device state, never restored from another installation.
             db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("sms","false"))

@@ -2489,13 +2489,13 @@ Deliver in this order, after closing the outstanding v1.4.1 verification failure
 3. **Payment planning:** recurring schedules, upcoming calendar/list, reminders and actual-payment matching.
 4. **Forecasts:** spending/category estimates, projected balance trends and shortfall alerts.
 
-Introduce normalized planning records and repositories alongside the existing ledger. Use tested, non-destructive Room migrations and version the encrypted backup format when its contents expand. Back up and restore hierarchy/splits, checkpoints, transfer links, budget periods/rules, schedules/occurrences, settlement links and relevant settings. Define defaults for older archives, validate new relationships before replacement and preserve rollback on failure. No schema or archive version is changed by this requirements update.
+Introduce normalized planning records and repositories alongside the existing ledger. Use tested, non-destructive Room migrations and version the encrypted backup format when its contents expand. Back up and restore hierarchy/splits, checkpoints, transfer links, budget periods/rules, schedules/occurrences, settlement links and relevant settings. Define defaults for older archives, validate new relationships before replacement and preserve rollback on failure. The implemented first stage uses schema 3 and archive version 4 under §83.
 
-Keep the single root development reference and feature tracker current. No release version or delivery date is assigned to these stages yet.
+Keep the single root development reference and feature tracker current. The first-stage target is v1.5.0/code 8 under §83; later stages have no assigned release date.
 
 # 82. Financial Manager Acceptance Scenarios
 
-These supplement, rather than replace, the original twelve scenarios in section 72. All are planned checks until implementation and dated validation evidence exist.
+These supplement, rather than replace, the original twelve scenarios in section 72. Current coverage and remaining stages are recorded separately in leftout.md and VALIDATION.md.
 
 | ID | Required result |
 | --- | --- |
@@ -2511,3 +2511,19 @@ These supplement, rather than replace, the original twelve scenarios in section 
 | FM10 | Budget/shortfall/reminder alerts respect preferences, avoid repeated duplicates, update after corrections and remain understandable when notification permission is denied. |
 | FM11 | Upgrade and backup/restore preserve existing records and all new planning relationships. Older archives receive documented defaults; corrupt archives and failed migrations/restores leave existing data intact. |
 | FM12 | Account/date isolation, partial periods, paise rounding, negative totals, accessible chart alternatives, large fonts, offline use and multi-year performance remain correct across Home, Plan, Insights and exact drilldowns. |
+
+# 83. Financial Manager First Release — Approved Implementation
+
+Approved on 2 October 2026: deliver v1.5.0/code 8 with foundations and budgets, keeping the app identity, signer and existing records. This section narrows the broader roadmap in §§74–82 for the first release.
+
+- Preserve existing category IDs/names/assignments; add explicit two-level grouping and exact transaction splits.
+- Support current and historical calculated balances from reconciled statement closing balances or manual start-of-day openings. SMS balances are displayed separately and never reset calculations. Unknown or conflicting checkpoints must not become invented balances.
+- Add account maintenance, archival/reactivation and confirmed paired transfers; retain both account movements. Accounts with planning history are currently guarded against permanent deletion and can be archived instead. Automatic approval review rejected irreversible cleanup of the newly introduced planning records; expanded permanent deletion remains unresolved rather than silently erasing history.
+- Monthly budgets default to all accounts, with optional per-account scope and overlapping-coverage prevention. Rollover defaults OFF, with optional surplus, capped positive surplus, or surplus-and-deficit modes. Each receiving period's configured rule determines its incoming carry; historical base allocations and rules remain recorded. Current-month adjustments require a remaining-amount preview.
+- New budgets include current-month spending without proration. Hidden/failed/owned-transfer/budget-excluded movements do not consume budgets, while hiding and budget exclusion never change balances. Refunds reduce spending in their posting month.
+- Bottom navigation: Home, Transactions, Plan, Insights, Settings. Plan contains Budgets; Statements remains accessible from Home and Settings. Budget month selection is independent of reporting/history filters.
+- Budget alerts are local, configurable and opt-in for push; in-app thresholds remain available without permission. Baseline existing activity on enablement, deduplicate crossings and cancel stale alerts after corrections.
+- Upgrade through Room schema 3 and backup format 4, accepting backup versions 1–4 with explicit legacy defaults. No destructive migration or loss of canonical/evidence records is permitted.
+- Payment schedules, payment reminders, forecasts and projected-shortfall alerts remain the next stages. This release implements only budget threshold/overspending notifications.
+
+Verification must cover preserved records, encrypted migrations from versions 1 and 2, backup compatibility/rollback, split and refund arithmetic, balance cutoffs and conflicts, paired transfers, budget overlap/rollover/recalculation, exact drilldowns, notification baseline/deduplication, navigation, screenshots, dense ledgers and a same-signer in-place release update. Implementation status and exceptions belong in leftout.md; executed evidence belongs in VALIDATION.md.

@@ -90,9 +90,10 @@ internal fun validateBackupRelations(s: BackupSnapshot) {
         if(d.action=="match") require(d.transactionId!=null)
     }
     s.settings.forEach { setting ->
-        require(setting.key in setOf("sms","notifications","app_lock","screenshots","sms_last_received","theme_mode")) { "Unsupported backup setting." }
+        require(setting.key in setOf("sms","notifications","app_lock","screenshots","sms_last_received","theme_mode","budget_notifications","budget_thresholds")) { "Unsupported backup setting." }
         if(setting.key=="theme_mode") require(setting.value in listOf("dark","light","system"))
         else if(setting.key=="sms_last_received") require(setting.value.toLongOrNull()?.let {it>=0}==true)
+        else if(setting.key=="budget_thresholds") require(setting.value.split(',').all{it.toIntOrNull()?.let{n->n in 1..100}==true})
         else require(setting.value in listOf("true","false"))
     }
 }

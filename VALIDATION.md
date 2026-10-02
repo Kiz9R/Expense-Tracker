@@ -226,3 +226,52 @@ Development checks initially found fixture issues: legacy-version digests were c
 Artifact: [app-release.apk](app/build/outputs/apk/release/app-release.apk), **version 1.3 / code 5**, **17,995,217 bytes**. SHA-256: **D0DD3A0256AF475A693BF6DE3F4BBEA8E2214C24AC74803FDB40208D4A3E9F34**. APK v2 signature verified with the retained personal signer, certificate SHA-256 **CAE7C0C84FB2D31A72FD32C8376294BBB77107DE173FC8B67E21B07B0C4EE152**. Signing material is unchanged and is not part of the financial archive.
 
 Remaining: physical-phone reinstall/phone-change recovery, real SAF provider interruptions, hardware Keystore/app-lock lifecycle, Android 11 and accessibility checks. Large archives remain bounded to 64 MB but are processed in memory; multi-year memory/performance profiling remains open. A failed SAF output may leave an incomplete destination, which the UI tells the user to remove/retry. No physical-phone recovery or hardware key-invalidation claim is made.
+
+## 2 October 2026 — v1.5.0 foundations and budgets candidate (release blocked)
+
+Implemented version **1.5.0 / code 8**, Room schema **3**, backup format **4** (accepts 1–4). App ID and name remain unchanged. This is an implementation/test record, **not a released update**: the configured signing key does not match the retained v1.4/v1.4.1 APKs.
+
+Final build command:
+
+    .\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest :app:lintDebug :app:assembleRelease --console=plain
+
+[Final build](build/v150-accessibility-build.txt): BUILD SUCCESSFUL, 1m33s. JVM reports **60 tests: 59 passed, 1 optional private-SMS fixture skipped, 0 failures/errors**. Lint reports **0 errors / 31 warnings**. Existing warnings include dependency/version and source/resource cleanup recommendations; no dependency upgrades were made for this release.
+
+[Final full Android suite](build/v150-final-accessibility-device.txt): **OK (88 tests)** in 156.463s on the Android 17 Medium_Phone emulator. This is **85 executed passes and 3 optional skips**: private PDF validation, externally injected SMS fixture, and the separate actual-uninstall/reinstall fixture. Earlier private-source and actual-reinstall evidence remains dated history, not a claim that those fixtures were rerun today. One initial attempt immediately after emulator restart exited with “Process crashed” before test discovery; a subsequent complete run passed. The prior complete run also passed before the large-font navigation adjustment.
+
+Coverage includes:
+- The two outstanding v1.4.1 regressions: valid multi-category visual fixtures and actual screenshot-window capture/protection/recreation. MainActivity now reads readiness in composition before applying FLAG_SECURE; no lock/screenshot assertions were removed.
+- ₹1 sent/₹1 received, ordinary income/refunds/negative totals, independent drilldowns, navigation roots and statement/review flows.
+- Encrypted schema1→2→3 and schema2→3 preservation tests, existing encryption/metadata/evidence/ingestion/reconciliation regressions, authenticated archive1–4 decoding/replacement/rollback and planning relationship validation.
+- Ten PlanningIntegrationTest cases for checkpoint cutoffs/conflicts, hidden/failed/future movements, split sums and parent totals, proportional refunds/personal overrides, paired transfers, budget scope/exclusions, late facts/rollover, alert baselines/deduplication/corrections, archived accounts, coverage snapshots and backup4 rollback.
+- Five PlanningMathTest cases for rollover modes/caps/deficits, zero allocations, checked arithmetic, deterministic paise allocation and thresholds.
+- The existing synthetic five-year / 20,000-transaction AnalyticsIntegrationTest workload passed. This checks bounded history and aggregate responsiveness, not physical-device frame rendering or large planning/backup memory behavior.
+
+[Final visual test](build/v150-final-visual-device.txt): **OK (1 test)** in 20.194s, run with PlanningUiTest and v150_visual=true. Six synthetic captures are in [final visual evidence](build/v150-final-visuals): empty/populated dark Plan, budget detail, balances, light Plan and 200% font Plan. The UI creates a ₹5,000 budget against ₹4,200 spending, checks ₹800 remaining and a ₹20,800 calculated balance from a ₹25,000 opening. Final 200% font capture was inspected; bottom navigation uses accessible named icons at large font sizes and the app bar identifies the screen. The Compose test host does not exercise MainActivity's status-bar color handling. Full TalkBack, every dialog at every font size, small physical screens and contrast/touch-target audits remain pending.
+
+### Signing and upgrade blocker
+
+The built candidate is **18,491,789 bytes**, SHA-256 **3D1C035A40D301C89403C6733B209230F29B08C25F9CD5A38CC95B36ADD80449**. apksigner verified its certificate SHA-256 **CAE7C0C84FB2D31A72FD32C8376294BBB77107DE173FC8B67E21B07B0C4EE152**. This is the workspace's older configured personal signer.
+
+The retained [v1.4.1 APK](app/release/app-release.apk), code 7, and the retained v1.4 APK both instead use certificate SHA-256 **A3379A4B38B27921299A0E619D29811D3366B104E5A09EE05A0B82F2104BFCA3**. Installing the candidate with adb install -r failed with **INSTALL_FAILED_UPDATE_INCOMPATIBLE**. No uninstall or key replacement was used to bypass Android's protection.
+
+An isolated disposable emulator (5556, separate build/v150-upgrade-data.img) was seeded through the retained v1.4 UI with account UpgradeFixture, ₹1 debit and ₹1 credit. A cold launch showed two manual transactions, ₹1 spending, ₹1 income and ₹0 cash flow ([before XML](build/v150-upgrade-before.xml)). The same-signer retained v1.4.1 control update succeeded ([baseline XML](build/v150-upgrade-v141-baseline.xml)). The v1.5.0 in-place update and exact release cold launch remain **unverified** until the original signing configuration is provided. Its synthetic data image is retained for continuing this check. The original signing key location has been requested; no passwords are written in this evidence.
+
+### Remaining scope and limitations
+
+- Automatic approval review rejected expanding permanent account deletion to erase the new planning records. The implementation guards such accounts and supports archival/reactivation; paired surviving-account cleanup on permanent deletion remains unimplemented. The existing deletion flow remains for accounts without planning history.
+- Budget repository alert/dedup logic is tested; actual platform push permission denial/grant, background notification delivery and restore-to-notification behavior still require device checks. Timing remains OS-controlled.
+- Historical balance UI is bounded to the latest twelve months. Wider historical navigation, full phone/TalkBack checks, Android 11 hardware behavior and larger planning/backup profiling remain open.
+- No representative private PDF/SMS fixture was modified or rerun today. Optional notification adapters and unseen source layouts retain existing support limits.
+- Payment schedules/reminders, forecasts and projected shortfall alerts are subsequent stages.
+- Required release sign-off is withheld. Obtain the original signer, rebuild, verify the exact signature, complete the synthetic in-place upgrade/cold launch and then deliver the APK.
+
+## 2 October 2026 — screenshot-reported IDE inspection fixes
+
+Fixed the settings-query keyword inspection by quoting `key` and renaming the bind parameter to settingKey. Removed unused imports, the obsolete CategoriesScreen/deprecated icon and old analytics StateFlows. Constructor qualifiers now use @param:ApplicationContext. Both ViewModels require lifecycle-supplied SavedStateHandle; test fixtures construct it explicitly. Coroutine timeout/delay values use Duration, the redundant Executor SAM wrapper is removed, and test schema assets use the non-deprecated directories API. The activity inherits its unchanged application label. The incoming SMS permission remains with a narrowly scoped, commented SmsAndCallLogPolicy exception for personal sideloading; this does not establish Play Store eligibility.
+
+[Initial build](build/inspection-cleanup-build.txt) passed in 2m12s. [Final build](build/inspection-cleanup-final-build.txt), after the same saved-state correction in AnalyticsViewModel, passed in 58s. Commands: assembleDebug, assembleDebugAndroidTest, testDebugUnitTest and lintDebug. No Kotlin compiler warning/error lines were emitted. Unit results: **59 passed, 1 optional private-fixture skip, 0 failures/errors**. Final lint: **0 errors / 26 warnings**, down from 31. Remaining findings are 15 dependency/version notices, 7 unused resources, 3 dependency trust-manager findings and 1 KTX suggestion on an explicitly checked synchronous encryption-key preference commit; its Boolean failure check is deliberately retained.
+
+[Full Android regression](build/inspection-cleanup-device.txt): **OK (88 tests)** in 149.53s, meaning 85 executed passes and the same 3 optional skips. It covers settings reads, encryption, migrations, backup/rollback, SMS, navigation, planning and screenshot assertions. Following the final AnalyticsViewModel constructor-only adjustment, focused navigation/visual/planning/real-activity/analytics checks passed **OK (12 tests)** in 77.205s: [final focused results](build/inspection-cleanup-final-device.txt).
+
+No schema/backup/version/signing change was made, and no release APK was rebuilt for this cleanup. The previously recorded release-signing blocker remains. Gradle/compiler/lint and emulator checks were run; Android Studio's interactive inspection itself was not automated.

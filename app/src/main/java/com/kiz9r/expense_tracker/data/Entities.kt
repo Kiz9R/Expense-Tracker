@@ -8,7 +8,9 @@ data class AccountEntity(@PrimaryKey val id: String = newId(), val nickname: Str
     val accountType: String = "Savings", val bankName: String = "SBI", val currency: String = "INR",
     val active: Boolean = true, val createdAt: Long = System.currentTimeMillis())
 @Entity(tableName = "categories", indices = [Index(value = ["name"], unique = true)])
-data class CategoryEntity(@PrimaryKey val id: String = newId(), val name: String, val system: Boolean = false)
+data class CategoryEntity(@PrimaryKey val id: String = newId(), val name: String, val system: Boolean = false,
+    val parentId: String? = null, @ColumnInfo(defaultValue = "'label'") val icon: String = "label",
+    @ColumnInfo(defaultValue = "0") val archived: Boolean = false)
 @Entity(tableName = "transactions", foreignKeys = [ForeignKey(entity = AccountEntity::class,
     parentColumns = ["id"], childColumns = ["accountId"], onDelete = ForeignKey.RESTRICT)],
     indices = [Index("accountId"), Index("date"), Index("reference"), Index("verification")])
@@ -77,7 +79,8 @@ data class ImportJobEntity(@PrimaryKey val id: String = newId(), val accountId: 
     val previewToken: String? = null, val resolutionsJson: String? = null)
 data class TransactionItem(
     @Embedded val transaction: TransactionEntity, val displayName: String, val categoryName: String?,
-    val categoryId: String?, val notes: String, val hidden: Boolean, val accountName: String, val accountLast4: String
+    val categoryId: String?, val notes: String, val hidden: Boolean, val accountName: String, val accountLast4: String,
+    val allocationMinor: Long? = null
 )
 data class MonthlyTotals(val spend: Long = 0, val income: Long = 0, val refunds: Long = 0, val count: Int = 0) {
     val netSpend get() = spend - refunds

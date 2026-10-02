@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
-import com.kiz9r.expense_tracker.data.*
 import com.kiz9r.expense_tracker.domain.*
 import com.kiz9r.expense_tracker.ingestion.*
 import kotlinx.coroutines.runBlocking
@@ -25,6 +24,7 @@ class SmsReviewUiTest {
         compose.waitUntil(15000) {compose.onAllNodesWithTag("navigation.settings").fetchSemanticsNodes().isNotEmpty()}
         compose.onNodeWithTag("navigation.settings").performClick()
         compose.onNodeWithTag("settings.review").performScrollTo().performClick()
+        compose.waitUntil(15000) {compose.onAllNodesWithTag("review.items."+event.id).fetchSemanticsNodes().isNotEmpty()}
         compose.onNodeWithTag("review.items."+event.id).performScrollTo().performClick()
         compose.onNodeWithTag("review.confirm").performScrollTo().assertIsNotEnabled()
         compose.onNodeWithTag("review.account").assertDoesNotExist()

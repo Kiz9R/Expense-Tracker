@@ -14,7 +14,7 @@ object BackupArchive {
             val root=JsonParser.parseString(plain.toString(Charsets.UTF_8)).asJsonObject
             require(root.get("version")?.isJsonPrimitive==true && root.getAsJsonPrimitive("version").isNumber)
             require(root.get("createdAt")?.isJsonPrimitive==true && root.getAsJsonPrimitive("createdAt").isNumber)
-            require(root.get("version")?.asBigDecimal?.intValueExact() in 1..3)
+            require(root.get("version")?.asBigDecimal?.intValueExact() in 1..4)
             require(root.get("createdAt")?.asBigDecimal?.longValueExact()?.let { it>0 }==true)
             // Gson can otherwise silently default absent primitives or null collections.
             val required=mapOf(
@@ -57,6 +57,14 @@ object BackupArchive {
                     }
                 }
             }
+            val version=root.get("version").asInt
+            val additions=listOf("checkpoints","allocations","transferPairs","budgetExclusions","budgets","budgetRevisions","budgetPeriods","budgetCoverage")
+            if(version<4) {
+                additions.forEach{root.add(it,com.google.gson.JsonArray())}
+                root.getAsJsonArray("categories").forEach { item->item.asJsonObject.apply {
+                    add("parentId",com.google.gson.JsonNull.INSTANCE);addProperty("icon","label");addProperty("archived",false)
+                }}
+            } else validatePlanningJson(root)
             return gson.fromJson(root,BackupSnapshot::class.java).also(::validateBackup)
         } catch(e: Exception) {
             throw IllegalArgumentException("Backup contents are incomplete, unsupported or inconsistent. Existing data was not changed.",e)

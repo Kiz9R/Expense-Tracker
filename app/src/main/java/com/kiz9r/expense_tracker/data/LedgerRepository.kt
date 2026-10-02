@@ -46,6 +46,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
     suspend fun deleteAccount(accountId: String) = db.withTransaction {
         require(dao.allAccounts().any { it.id == accountId }) { "Account no longer exists." }
         // Remove ownership-dependent records before their lookup paths disappear.
+        require(!db.planning().hasAccountPlanningHistory(accountId)) { "This account has planning history. Archive it to preserve balances, budgets and allocations." }
         dao.deleteAccountDecisions(accountId)
         dao.deleteAccountEvents(accountId)
         dao.deleteAccountRefunds(accountId)
@@ -79,6 +80,8 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
         require(dao.allAccounts().any { it.id == input.accountId }) { "Select an account." }
         val old = input.id?.let { requireNotNull(dao.transaction(it)) }
         require(old == null || old.manuallyCreated && old.verification != Verification.VERIFIED) { "Bank evidence cannot be edited." }
+        require(old == null || db.planning().pair(old.id)==null) { "Unpair this transfer before changing its financial details." }
+        require(old == null || db.planning().allocations(old.id).isEmpty() || amount==old.amountMinor) { "Clear split allocations before changing the amount." }
         require(old == null || dao.refundConnections(old.id)==0) { "Linked refunds preserve their financial amounts. Edit personal details instead." }
         val tx = TransactionEntity(id = old?.id ?: newId(), accountId = input.accountId, amountMinor = amount,
             direction = input.direction,date = date.toString(),timestamp = timestamp,merchantOriginal = input.merchant.trim(),
@@ -100,25 +103,31 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
         updateMetadataInternal(id,name,category,notes,tags)
     }
     private suspend fun updateMetadataInternal(id: String, name: String, category: String?, notes: String, tags: String) {
-        require(category == null || dao.allCategories().any { it.id == category }) { "Category no longer exists." }
-        dao.saveMetadata((dao.metadata(id) ?: MetadataEntity(id)).copy(merchantDisplay=name.trim(),categoryId=category,notes=notes,userEdited=true))
+        require(category == null || dao.allCategories().any { it.id == category && (!it.archived || dao.metadata(id)?.categoryId==it.id) }) { "Choose an active category." }
+        val previousMetadata=dao.metadata(id) ?: MetadataEntity(id)
+        val allocations=db.planning().allocations(id)
+        if(previousMetadata.categoryId!=category && allocations.isNotEmpty() && allocations.none{it.userEdited}) db.planning().clearAllocations(id)
+        dao.saveMetadata(previousMetadata.copy(merchantDisplay=name.trim(),categoryId=category,notes=notes,userEdited=true))
         dao.clearTags(id)
         val existing = dao.allTags()
         tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(30).forEach { name ->
             val tag = existing.firstOrNull { it.name == name } ?: TagEntity(name=name).also { dao.saveTag(it) }
             dao.saveTransactionTag(TransactionTagEntity(id,tag.id))
         }
+        com.kiz9r.expense_tracker.planning.ClassificationRepository(db).syncRefunds(id)
     }
     suspend fun hide(id: String, hidden: Boolean) = db.withTransaction {
         requireNotNull(dao.transaction(id))
         dao.saveMetadata((dao.metadata(id) ?: MetadataEntity(id)).copy(hidden=hidden))
     }
     suspend fun delete(id: String) = db.withTransaction {
+        require(db.planning().pair(id)==null && db.planning().allocations(id).isEmpty() && db.planning().excluded(id)==0) { "Remove planning links before deleting this manual entry, or hide it." }
         require(dao.refundConnections(id)==0) { "This entry is linked to a refund. Hide it instead." }
         require(dao.deleteManual(id) == 1) { "Only unverified manual entries can be deleted." }
     }
     suspend fun ownedTransfer(id: String, enabled: Boolean) = db.withTransaction {
         val tx = requireNotNull(dao.transaction(id))
+        require(enabled || db.planning().pair(id)==null) { "Unpair this transfer first." }
         dao.saveTransaction(tx.copy(ownedTransfer=enabled))
     }
     suspend fun category(id: String?, name: String) = db.withTransaction {
@@ -128,6 +137,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
         dao.saveCategory(CategoryEntity(id=old?.id ?: newId(),name=name.trim()))
     }
     suspend fun deleteCategory(id: String) = db.withTransaction {
+        require(db.planning().allocations().none{it.categoryId==id} && db.planning().coverage().none{it.categoryId==id} && db.planning().budgets().none{it.categoryId==id} && dao.allCategories().none{it.parentId==id}) { "Archive categories that are in use." }
         require(dao.deleteCategory(id) == 1) { "Only unused custom categories can be deleted." }
     }
     suspend fun rule(rule: MerchantRuleEntity) = db.withTransaction {
@@ -152,7 +162,8 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
             tx.direction == Direction.CREDIT -> "Income"
             else -> "Other"
         } }?.id
-        dao.saveMetadata(meta.copy(merchantDisplay=rule?.rename.orEmpty(),categoryId=category))
+        val activeCategory=category?.takeIf{id->dao.allCategories().any{it.id==id && !it.archived}}
+        dao.saveMetadata(meta.copy(merchantDisplay=rule?.rename.orEmpty(),categoryId=activeCategory))
     }
 }
 

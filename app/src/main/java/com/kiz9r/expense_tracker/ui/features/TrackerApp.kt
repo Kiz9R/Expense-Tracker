@@ -29,8 +29,9 @@ import androidx.navigation.compose.*
     val busy by vm.busy.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    val largeNavigationText=androidx.compose.ui.platform.LocalDensity.current.fontScale>1.5f
     val tabs = listOf("dashboard" to Icons.Outlined.Home,"transactions" to Icons.AutoMirrored.Outlined.List,
-        "insights" to Icons.Outlined.Insights,"statements" to Icons.Outlined.Description,"settings" to Icons.Outlined.Settings)
+        "plan" to Icons.Outlined.AccountBalanceWallet,"insights" to Icons.Outlined.Insights,"settings" to Icons.Outlined.Settings)
     fun topLevel(destination: String) {
         if(!ready || accounts.isEmpty()) return
         nav.navigate(destination) {
@@ -54,7 +55,7 @@ import androidx.navigation.compose.*
         bottomBar={if(accounts.isNotEmpty()) NavigationBar {
             tabs.forEach { (name,icon) -> NavigationBarItem(selected=route==name,onClick={
                 topLevel(name)
-            },icon={Icon(icon,null)},label={Text(if(name=="dashboard") "Home" else name.replaceFirstChar { it.uppercase() },maxLines=2,style=MaterialTheme.typography.labelSmall)},modifier=Modifier.testTag("navigation."+name)) }
+            },icon={Icon(icon,if(name=="dashboard") "Home" else name.replaceFirstChar {it.uppercase()})},alwaysShowLabel=!largeNavigationText,label={if(!largeNavigationText) Text(if(name=="dashboard") "Home" else name.replaceFirstChar { it.uppercase() },maxLines=2,style=MaterialTheme.typography.labelSmall)},modifier=Modifier.testTag("navigation."+name)) }
         }},
         floatingActionButton={if(accounts.isNotEmpty() && route in listOf("dashboard","transactions"))
             FloatingActionButton(onClick={nav.navigate("add")},modifier=Modifier.testTag("transactions.create")){Icon(Icons.Outlined.Add,"Add transaction")}},
@@ -78,9 +79,12 @@ import androidx.navigation.compose.*
                 composable("add") { TransactionForm(vm,null) {nav.navigate("detail/$it"){popUpTo("add"){inclusive=true}}} }
                 composable("edit/{id}") { TransactionForm(vm,it.arguments?.getString("id")) {nav.popBackStack()} }
                 composable("detail/{id}") { DetailScreen(vm,requireNotNull(it.arguments?.getString("id")),{id->nav.navigate("edit/$id")},{nav.popBackStack()}) }
+                composable("plan") { BudgetsScreen(vm) {nav.navigate("budget/$it")} }
+                composable("budget/{id}") { BudgetDetailScreen(vm,requireNotNull(it.arguments?.getString("id"))) {nav.navigate("detail/$it")} }
+                composable("balances") { BalancesScreen(vm,::navigate) }
                 composable("statements") { StatementsScreen(vm) {nav.navigate("statement/$it")} }
                 composable("statement/{id}") { StatementDetailScreen(vm,requireNotNull(it.arguments?.getString("id"))) {nav.navigate("detail/$it")} }
-                composable("categories") { CategoriesScreen(vm) {category-> drill(HistoryFilter(category=category))} }
+                composable("categories") { CategoryManager(vm) {category-> drill(HistoryFilter(category=category))} }
                 composable("settings") { SettingsScreen(vm,::navigate) }
                 composable("accounts") { AccountScreen(vm,false) {nav.popBackStack()} }
                 composable("review") { ReviewScreen(vm) {nav.navigate("add")} }
