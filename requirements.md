@@ -2527,3 +2527,23 @@ Approved on 2 October 2026: deliver v1.5.0/code 8 with foundations and budgets, 
 - Payment schedules, payment reminders, forecasts and projected-shortfall alerts remain the next stages. This release implements only budget threshold/overspending notifications.
 
 Verification must cover preserved records, encrypted migrations from versions 1 and 2, backup compatibility/rollback, split and refund arithmetic, balance cutoffs and conflicts, paired transfers, budget overlap/rollover/recalculation, exact drilldowns, notification baseline/deduplication, navigation, screenshots, dense ledgers and a same-signer in-place release update. Implementation status and exceptions belong in leftout.md; executed evidence belongs in VALIDATION.md.
+
+# 84. Budget Carry-Forward and Financial Colors
+
+Approved for the v1.5.0 candidate on 3 October 2026. Rollover remains optional and defaults Off. Preserve all existing budget modes, revisions and allocations.
+
+Offer Off, Carry unused money only, and Carry unused money and deduct overspending. In the two-way mode, outstanding deficits reduce following monthly allocations until covered; positive carry caps never truncate deficits. A ₹5,000 base with ₹12,000 spent leaves a ₹7,000 deficit, then −₹2,000 effective allocation and, with no further spending, ₹3,000 the month after. Show base allocation, carried surplus/deficit, effective allocation, net spending and remaining budget separately. Keep zero/negative allocations visible without percentage progress. Carry-forward does not create bank transactions.
+
+Use shared dark/light financial colors independently of emerald actions: spending/debits are red; credits/income/refunds are green; warnings and review statuses are yellow/amber. Positive net spending is red, negative net spending is green and zero is neutral. Net cash flow and carried adjustments use green for positive and red for negative. Negative remaining budget is red; balances, base allocations and nonnegative remaining budget are neutral. Overspending combines a yellow warning with a separately labelled red amount.
+
+Apply the same roles to Home, history/details/forms, Insights, budgets and statement/review amounts. Spending chart series and category shades are red; income/refund series green; comparisons neutral. Retain labelled legends, signs, icons, accessible values and hierarchical test tags. Notices distinguish Information, Warning, Error and Success; actual operation failures remain errors. Test both themes, text/graphic contrast and large fonts alongside multi-month carry, year boundaries, caps, late refunds, repeated recalculation and historical rule preservation. No migration, backup or version change is required.
+
+# 85. Shared Multi-Category Budgets and Reliable Updates
+
+Approved 3 October 2026 for the v1.5.0 candidate. A budget may cover one or more selected categories sharing one allocation, carry-forward balance and alert threshold. Parents include their children without double counting. Use a searchable checkbox picker with selected names/count, accessible inherited-child states and hierarchical test tags. Budget cards/details identify their month, account scope and covered categories.
+
+Category changes default to next month; explicit current-month changes preview spending and remaining money before confirmation. Preserve prior coverage snapshots and historical revisions. Reject overlapping effective category coverage when account scopes intersect, naming conflicting budgets. Splits contribute only covered allocations; ordinary credits do not replenish budgets. Retain existing refund, hidden/failed/transfer/exclusion and date/account rules.
+
+Budget observation must recalculate after manual saves, edits, classification, ingestion, reconciliation and restore. Expose loading, ready and error states, retain clearly labelled stale results on failure, permit Retry and automatically recover after later changes. A calculation error must not terminate observation or appear as an empty ledger. Verify a ₹5,000 budget plus ₹100 eligible manual expense shows ₹100 spent and ₹4,900 remaining without restarting.
+
+Room schema 4 adds revision-category selections and backfills every legacy revision while preserving coverage. Backup version 5 exports selections and accepts versions 1–5; version 4 reconstructs legacy single selections, earlier versions retain planning defaults. Validate references, nonempty selections and overlap before transactional replacement. Existing signing-key and physical-device release limitations remain.

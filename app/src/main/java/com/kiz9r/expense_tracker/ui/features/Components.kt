@@ -1,5 +1,6 @@
 package com.kiz9r.expense_tracker.ui.features
 
+import com.kiz9r.expense_tracker.ui.theme.financialColors
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,9 +32,10 @@ import com.kiz9r.expense_tracker.domain.*
     if(subtitle!=null) Text(subtitle,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
 }
 @Composable fun Field(value: String, change: (String)->Unit, label: String, tag: String,
-    password: Boolean=false, numeric: Boolean=false, enabled: Boolean=true) {
+    password: Boolean=false, numeric: Boolean=false, enabled: Boolean=true,
+    textColor: androidx.compose.ui.graphics.Color=androidx.compose.ui.graphics.Color.Unspecified) {
     OutlinedTextField(value=value,onValueChange=change,label={ Text(label) },modifier=Modifier.fillMaxWidth().testTag(tag),
-        shape=MaterialTheme.shapes.small,singleLine=true,textStyle=if(tag=="transactions.form.amount") MaterialTheme.typography.headlineLarge else MaterialTheme.typography.bodyLarge,enabled=enabled,visualTransformation=if(password) PasswordVisualTransformation() else VisualTransformation.None,
+        shape=MaterialTheme.shapes.small,singleLine=true,textStyle=(if(tag=="transactions.form.amount") MaterialTheme.typography.headlineLarge else MaterialTheme.typography.bodyLarge).copy(color=textColor),enabled=enabled,visualTransformation=if(password) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions=KeyboardOptions(keyboardType=if(password) KeyboardType.Password else if(numeric) KeyboardType.Decimal else KeyboardType.Text))
 }
 @Composable fun Choice(label: String, selected: String, options: List<Pair<String,String>>, tag: String, compact: Boolean=false, change: (String)->Unit) {
@@ -49,10 +51,32 @@ import com.kiz9r.expense_tracker.domain.*
         }
     }
 }
-@Composable fun Notice(text: String, error: Boolean=false) {
-    Surface(color=if(error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape=MaterialTheme.shapes.medium,modifier=Modifier.fillMaxWidth()) {
-        Text(text,Modifier.padding(16.dp),style=MaterialTheme.typography.bodyMedium)
+enum class NoticeSeverity { Information, Warning, Error, Success }
+@Composable fun Notice(text: String, modifier: Modifier=Modifier, severity: NoticeSeverity=NoticeSeverity.Information) {
+    val colors=financialColors
+    val foreground=when(severity) {
+        NoticeSeverity.Warning -> colors.warning
+        NoticeSeverity.Error -> colors.spending
+        NoticeSeverity.Success -> colors.credit
+        NoticeSeverity.Information -> colors.neutral
+    }
+    val background=when(severity) {
+        NoticeSeverity.Warning -> colors.warningContainer
+        NoticeSeverity.Error -> colors.spendingContainer
+        NoticeSeverity.Success -> colors.creditContainer
+        NoticeSeverity.Information -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val icon=when(severity) {
+        NoticeSeverity.Warning -> Icons.Outlined.WarningAmber
+        NoticeSeverity.Error -> Icons.Outlined.ErrorOutline
+        NoticeSeverity.Success -> Icons.Outlined.CheckCircle
+        NoticeSeverity.Information -> Icons.Outlined.Info
+    }
+    Surface(color=background,contentColor=foreground,shape=MaterialTheme.shapes.medium,modifier=modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Icon(icon,contentDescription=severity.name,modifier=Modifier.size(24.dp))
+            Text(text,Modifier.weight(1f),color=foreground,style=MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 @Composable fun Toggle(label: String, checked: Boolean, tag: String, change: (Boolean)->Unit) {
@@ -63,7 +87,7 @@ import com.kiz9r.expense_tracker.domain.*
 @Composable fun TransactionCard(item: TransactionItem, open: ()->Unit) {
     val tx=item.transaction
     val refund=tx.kind in listOf(EventKind.REFUND,EventKind.REVERSAL)
-    val color=when {refund->MaterialTheme.colorScheme.tertiary;tx.direction==Direction.DEBIT->MaterialTheme.colorScheme.error;else->MaterialTheme.colorScheme.primary}
+    val color=financialColors.movement(tx.amountMinor,tx.direction)
     val status=when {
         tx.outcome!=Outcome.POSTED -> tx.outcome.name.lowercase().replace('_',' ')
         tx.verification==Verification.VERIFIED -> "Statement verified"
@@ -81,14 +105,14 @@ import com.kiz9r.expense_tracker.domain.*
             Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                 if(largeFont) {
                     Text(item.displayName,style=MaterialTheme.typography.titleSmall)
-                    Text((if(tx.direction==Direction.DEBIT) "− " else "+ ")+Money.format(tx.amountMinor),color=color,style=MaterialTheme.typography.titleMedium)
+                    Text((if(tx.direction==Direction.DEBIT) "− " else "+ ")+Money.format(tx.amountMinor),color=color,style=MaterialTheme.typography.titleMedium,modifier=Modifier.testTag("transactions.items."+tx.id+".amount"))
                 } else Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     Text(item.displayName,Modifier.weight(1f),maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.titleSmall)
-                    Text((if(tx.direction==Direction.DEBIT) "− " else "+ ")+Money.format(tx.amountMinor),color=color,style=MaterialTheme.typography.labelLarge)
+                    Text((if(tx.direction==Direction.DEBIT) "− " else "+ ")+Money.format(tx.amountMinor),color=color,style=MaterialTheme.typography.labelLarge,modifier=Modifier.testTag("transactions.items."+tx.id+".amount"))
                 }
-                item.allocationMinor?.let{Text(Money.format(it)+" allocated of "+Money.format(tx.amountMinor),style=MaterialTheme.typography.labelLarge)}
+                item.allocationMinor?.let{Text(Money.format(it)+" allocated of "+Money.format(tx.amountMinor),style=MaterialTheme.typography.labelLarge,color=color)}
                 Text(listOfNotNull(item.categoryName,item.accountName).joinToString(" · "),style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                Text((if(tx.verification==Verification.VERIFIED) "✓ " else "◷ ")+status,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text((if(tx.verification==Verification.VERIFIED) "✓ " else "◷ ")+status,style=MaterialTheme.typography.labelSmall,color=if(tx.verification==Verification.NEEDS_REVIEW || tx.verification==Verification.PROVISIONAL) financialColors.warning else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

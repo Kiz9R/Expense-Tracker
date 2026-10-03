@@ -46,7 +46,7 @@ class TrackerViewModel @Inject constructor(
     val budgetMonth=MutableStateFlow(savedState.get<String>("budget_month")?.let(YearMonth::parse) ?: YearMonth.from(Dates.today()))
     private val reportingDay=flow {while(true){emit(Dates.today());delay(1.minutes)}}.distinctUntilChanged()
     val balanceReports=reportingDay.flatMapLatest{balances.observe(it)}.catch {message.value=it.message}.stateIn(viewModelScope,sharing,emptyList())
-    val budgetReports=combine(budgetMonth,reportingDay){month,day->month to day}.flatMapLatest{budgets.observe(it.first)}.catch{message.value=it.message}.stateIn(viewModelScope,sharing,emptyList())
+    val budgetState=combine(budgetMonth,reportingDay){month,day->month to day}.flatMapLatest{budgets.observe(it.first)}.stateIn(viewModelScope,sharing,com.kiz9r.expense_tracker.planning.BudgetLoadState(budgetMonth.value,loading=true))
     fun planningState(id: String)=ledger.db.invalidationTracker.createFlow("allocations","budget_exclusions","transfer_pairs").map {
         Triple(ledger.db.planning().allocations(id),ledger.db.planning().excluded(id)>0,ledger.db.planning().pair(id))
     }.flowOn(Dispatchers.IO)

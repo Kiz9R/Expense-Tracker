@@ -7,8 +7,8 @@ import androidx.room.RoomDatabase
     StatementRowEntity::class, ReviewDecisionEntity::class, MandateEntity::class,
 RefundLinkEntity::class, SettingEntity::class, ImportJobEntity::class,
     BalanceCheckpointEntity::class, AllocationEntity::class, TransferPairEntity::class, BudgetExclusionEntity::class,
-    BudgetEntity::class, BudgetRevisionEntity::class, BudgetPeriodEntity::class, BudgetCoverageEntity::class, BudgetAlertEntity::class],
-    views=[EffectiveAllocation::class], version = 3, exportSchema = true)
+    BudgetRevisionCategoryEntity::class, BudgetEntity::class, BudgetRevisionEntity::class, BudgetPeriodEntity::class, BudgetCoverageEntity::class, BudgetAlertEntity::class],
+    views=[EffectiveAllocation::class], version = 4, exportSchema = true)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun ledger(): LedgerDao
 abstract fun backup(): BackupDao

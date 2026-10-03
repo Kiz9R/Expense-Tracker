@@ -3,7 +3,7 @@ package com.kiz9r.expense_tracker.backup
 import com.kiz9r.expense_tracker.data.*
 
 data class BackupSnapshot(
-    val version: Int = 4,
+    val version: Int = 5,
     val createdAt: Long = System.currentTimeMillis(),
     val accounts: List<AccountEntity>,
     val categories: List<CategoryEntity>,
@@ -27,5 +27,6 @@ data class BackupSnapshot(
     val budgets: List<BudgetEntity> = emptyList(),
     val budgetRevisions: List<BudgetRevisionEntity> = emptyList(),
     val budgetPeriods: List<BudgetPeriodEntity> = emptyList(),
-    val budgetCoverage: List<BudgetCoverageEntity> = emptyList()
+    val budgetCoverage: List<BudgetCoverageEntity> = emptyList(),
+    val budgetSelections: List<BudgetRevisionCategoryEntity> = emptyList()
 )

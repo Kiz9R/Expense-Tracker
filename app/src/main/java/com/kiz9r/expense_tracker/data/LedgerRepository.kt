@@ -137,7 +137,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
         dao.saveCategory(CategoryEntity(id=old?.id ?: newId(),name=name.trim()))
     }
     suspend fun deleteCategory(id: String) = db.withTransaction {
-        require(db.planning().allocations().none{it.categoryId==id} && db.planning().coverage().none{it.categoryId==id} && db.planning().budgets().none{it.categoryId==id} && dao.allCategories().none{it.parentId==id}) { "Archive categories that are in use." }
+        require(db.planning().allocations().none{it.categoryId==id} && db.planning().coverage().none{it.categoryId==id} && db.planning().selections().none{it.categoryId==id} && db.planning().budgets().none{it.categoryId==id} && dao.allCategories().none{it.parentId==id}) { "Archive categories that are in use." }
         require(dao.deleteCategory(id) == 1) { "Only unused custom categories can be deleted." }
     }
     suspend fun rule(rule: MerchantRuleEntity) = db.withTransaction {

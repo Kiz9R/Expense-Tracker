@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
@@ -31,6 +32,8 @@ private val Light = lightColorScheme(
 )
 @Composable fun ExpensetrackerTheme(darkTheme: Boolean = true, dynamicColor: Boolean = false, mode: String? = null, content: @Composable () -> Unit) {
     val dark = when(mode) { "light" -> false; "system" -> isSystemInDarkTheme(); "dark" -> true; else -> darkTheme }
-    MaterialTheme(colorScheme=if(dark) Dark else Light, typography=Typography,
-        shapes=Shapes(small=RoundedCornerShape(16.dp),medium=RoundedCornerShape(20.dp),large=RoundedCornerShape(24.dp)), content=content)
+    CompositionLocalProvider(LocalFinancialPalette provides if(dark) DarkFinancialPalette else LightFinancialPalette) {
+        MaterialTheme(colorScheme=if(dark) Dark else Light, typography=Typography,
+            shapes=Shapes(small=RoundedCornerShape(16.dp),medium=RoundedCornerShape(20.dp),large=RoundedCornerShape(24.dp)), content=content)
+    }
 }

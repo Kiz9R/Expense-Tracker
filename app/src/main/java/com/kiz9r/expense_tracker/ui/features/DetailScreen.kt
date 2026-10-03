@@ -1,5 +1,6 @@
 package com.kiz9r.expense_tracker.ui.features
 
+import com.kiz9r.expense_tracker.ui.theme.financialColors
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,10 +30,11 @@ import com.kiz9r.expense_tracker.data.*
         val tx=current.transaction
         Panel(current.displayName,tx.direction.name.lowercase(),"transactions.detail.summary") {
             Text(Money.format(tx.amountMinor),style=MaterialTheme.typography.displaySmall,
-                color=if(tx.direction==Direction.DEBIT) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                color=financialColors.movement(tx.amountMinor,tx.direction),modifier=Modifier.testTag("transactions.detail.summary.amount"))
         }
         Text(tx.date+" · "+current.accountName+" ••••"+current.accountLast4+" · "+tx.channel.name)
-        Notice(if(tx.verification==Verification.VERIFIED) "Verified against an SBI statement." else "Detected or manually entered. Statement verification pending.")
+        Notice(if(tx.verification==Verification.VERIFIED) "Verified against an SBI statement." else "Detected or manually entered. Statement verification pending.",
+            severity=if(tx.verification==Verification.VERIFIED) NoticeSeverity.Success else NoticeSeverity.Warning)
         Text("Payment status: "+tx.outcome.name.lowercase().replace('_',' '))
         if(tx.reference.isNotBlank()) Text("Bank reference: "+tx.reference)
         Heading("Personal details","Your edits stay intact when the bank verifies this transaction.")

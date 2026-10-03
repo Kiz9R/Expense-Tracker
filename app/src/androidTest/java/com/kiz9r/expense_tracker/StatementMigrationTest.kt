@@ -44,7 +44,7 @@ class StatementMigrationTest {
             old.writableDatabase.execSQL("INSERT INTO import_jobs VALUES ('job','account','pending-hash','pending.pdf','masked pending text','QUEUED',NULL,NULL,1)")
         } finally {old.close()}
         val migrated=Room.databaseBuilder(context,LedgerDatabase::class.java,name)
-            .openHelperFactory(SupportOpenHelperFactory(key.copyOf())).addMigrations(MIGRATION_1_2,MIGRATION_2_3).build()
+            .openHelperFactory(SupportOpenHelperFactory(key.copyOf())).addMigrations(MIGRATION_1_2,MIGRATION_2_3,MIGRATION_3_4).build()
         try {
             assertEquals("Migration SBI",migrated.ledger().allAccounts().single().nickname)
             assertEquals(50000L,migrated.ledger().statementImport("import")!!.closingBalance)

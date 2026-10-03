@@ -2,7 +2,7 @@
 
 This is the single development reference for the SBI Expense Tracker. It consolidates the foundation and all seven former package documents. Read [requirements.md](requirements.md) for product requirements, [leftout.md](leftout.md) for current implementation and verification status, [VALIDATION.md](VALIDATION.md) for dated executed checks, and [rules.md](rules.md) for maintenance rules. Setup, installation and recovery instructions remain in [README.md](README.md).
 
-Last audited: 2 October 2026. This document describes existing code; it does not certify every requirement as complete. The approved plan keeps Android 11+, multiple SBI accounts, INR, English UI, PDF-first import and replacement restore. Notification ingestion is optional. The SBI Relationship Summary savings-account layout is validated against the supplied four-page encrypted sample; the earlier generic text-table parser remains experimental.
+Last audited: 3 October 2026. This document describes existing code; it does not certify every requirement as complete. The approved plan keeps Android 11+, multiple SBI accounts, INR, English UI, PDF-first import and replacement restore. Notification ingestion is optional. The SBI Relationship Summary savings-account layout is validated against the supplied four-page encrypted sample; the earlier generic text-table parser remains experimental.
 
 ## Table of contents
 
@@ -23,6 +23,9 @@ Last audited: 2 October 2026. This document describes existing code; it does not
 - [Known limitations and extension boundaries](#known-limitations-and-extension-boundaries)
 - [Planned financial-manager expansion](#planned-financial-manager-expansion)
 - [Foundations and budgets](#v150-foundations-and-budgets)
+- [IDE inspection cleanup](#ide-inspection-cleanup--2-october-2026)
+- [Financial colors and carry-forward presentation](#financial-colors-and-carry-forward-presentation--3-october-2026)
+- [Multi-category budgets and update recovery](#multi-category-budgets-and-update-recovery--3-october-2026)
 
 ## Architecture and execution flow
 
@@ -53,7 +56,7 @@ Configuration lives in [app/build.gradle.kts](app/build.gradle.kts), [root build
 
 Android Storage Access Framework supplies scoped document selection/export. Coroutines move extraction and ingestion off the UI thread. No banking service or remote API is used.
 
-Room schema export is configured through KSP. Current schema 3 adds the planning tables, allocation view and category hierarchy via MIGRATION_2_3. Historical MIGRATION_1_2 adds statement warning JSON and durable review choices. Encrypted tests open both older schemas and verify retained data through the current schema. Every subsequent schema change requires another explicit tested migration. Destructive fallback is forbidden.
+Room schema export is configured through KSP. Current schema 4 adds revision-category selections via MIGRATION_3_4, following schema 3’s planning tables, allocation view and category hierarchy via MIGRATION_2_3. Historical MIGRATION_1_2 adds statement warning JSON and durable review choices. Encrypted tests open both older schemas and verify retained data through the current schema. Every subsequent schema change requires another explicit tested migration. Destructive fallback is forbidden.
 
 Release optimization/R8 is enabled. [Keep rules](app/src/main/keepRules/rules.keep) preserve Gson DTOs and Room data records. The optional PDFBox JPEG2000 decoder is omitted because imports extract text without decoding images.
 
@@ -111,7 +114,7 @@ SHA-256 supplies stable identities/fingerprints, not source authenticity. Accoun
 
 ## Database schema and persistence
 
-[Exported schema 3](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/3.json) (with [schema 1](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/1.json) retained for migration tests) records exact fields, indices and foreign keys. Entities.kt and PlanningEntities.kt are the readable models. Schemas 1 and 2 remain migration fixtures.
+[Exported schema 4](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/4.json) (with [schema 1](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/1.json) retained for migration tests) records exact fields, indices and foreign keys. Entities.kt and PlanningEntities.kt are the readable models. Schemas 1–3 remain migration fixtures.
 
 | Table | Ownership, content and constraints |
 | --- | --- |
@@ -236,7 +239,7 @@ No application INTERNET, READ_SMS, broad storage, contacts, location, camera, mi
 
 ## Encrypted backup and restore
 
-BackupSnapshot version 4 (restoring versions 1–4) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links and settings. Transient import jobs and device/signing keys are excluded.
+BackupSnapshot version 5 (restoring versions 1–5) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links and settings. Transient import jobs and device/signing keys are excluded.
 
 BackupCrypto format ETBACK01 uses magic/header bytes, PBKDF2-HMAC-SHA256 with 600,000 iterations, fresh 16-byte salt, fresh 12-byte nonce and AES-256-GCM. The complete header is authenticated as AAD. Exports require a password of at least 12 characters. The derived key is independent of Android Keystore, permitting portable recovery.
 
@@ -254,7 +257,7 @@ There is no merge restore or saved backup password. Device keys are never import
 
 ## Premium UI and reporting
 
-The v1.4 design uses graphite #0D1114, charcoal surfaces, emerald actions, rose debits and blue refunds, native typography with tabular financial figures, rounded surfaces and bundled icons. Theme.kt and Type.kt define the system. Shared Components.kt gives every existing form, confirmation, lock, backup and recovery screen the same controls, spacing and palette. MainActivity updates status/navigation icon contrast with the selected theme. No network asset or chart library is used.
+The design uses graphite #0D1114, charcoal surfaces, emerald actions, red spending, green credits/refunds and yellow warnings, native typography with tabular financial figures, rounded surfaces and bundled icons. Theme.kt, Type.kt and FinancialColors.kt define the system. Shared Components.kt gives every existing form, confirmation, lock, backup and recovery screen the same controls, spacing and palette. MainActivity updates status/navigation icon contrast with the selected theme. No network asset or chart library is used.
 
 Home and Insights use [InsightsScreen.kt](app/src/main/java/com/kiz9r/expense_tracker/ui/features/InsightsScreen.kt) with reusable Compose Canvas controls in [AnalyticsCharts.kt](app/src/main/java/com/kiz9r/expense_tracker/ui/features/AnalyticsCharts.kt). Home has Net spent (debits minus refunds), Net gained (ordinary credits), Net total (gained minus spent), separate refunds, comparison, trend, categories, recent five and entry/import/review actions. Insights adds debit/refund and income/expense bars, signed merchant/channel bars, weekday totals, averages, largest expenses and recurring suggestions. The category donut uses positive gross debits, top five plus Other categories. Its selection stores the exact category IDs, including the uncategorized empty key. Merchant charts display the top 20 by absolute net spending and explicitly label this bound.
 
@@ -266,7 +269,7 @@ HistoryFilter/DAO support exact merchant, channel, category-key sets, weekday, f
 
 History uses a LazyColumn and a bounded 150-row SQL window, advancing by 50 rows near its end while stable transaction IDs preserve the overlapping scroll anchor. A control loads earlier windows. Search persists across tabs; filters move to a sheet. Date headers and icon/status text replace the old page layout. Forms put amount first, use native date/time selection and disclose optional notes/tags. Details separate amount/status, personal metadata, tracking actions and source evidence. Categories link to exact history. Statement screens retain their bounded review pages, persisted decisions and summaries with a staged import header.
 
-The existing settings table stores theme_mode. Room is now schema 3 for planning records. Backups export version 4, accept versions 1–4, preserve explicit themes and default missing legacy themes to dark. Device-specific keys and permissions are not exported.
+The existing settings table stores theme_mode. Room is now schema 4 for planning records and revision-category selections. Backups export version 5, accept versions 1–5, preserve explicit themes and default missing legacy themes to dark. Device-specific keys and permissions are not exported.
 
 Verification is tracked in leftout.md and the dated VALIDATION.md entry. AnalyticsTest checks leap/comparison/preset/bucket boundaries and signed values. AnalyticsIntegrationTest checks exclusions, multiple evidence, exact drilldowns, theme/legacy replacement and 20,000 transactions over five years. RedesignUiTest checks navigation/search preservation and can capture synthetic dark/light/large-font screens with the v14_visual instrumentation argument. Physical-phone/TalkBack and Android 11 behavior still require separate evidence.
 
@@ -343,7 +346,7 @@ The planning package contains BalanceRepository (checkpoint-backed daily aggrega
 
 PlanningScreens, ClassificationScreens and BudgetNotificationSettings supply the native UI. Home retains the three spending figures and adds account/budget summaries; Plan replaces the Statements bottom tab. Statements remains a secondary route from Home/Settings. Account archives preserve history and pause automatic assignment. Split and budget drilldowns show contribution amounts separately from full transactions. New budget defaults are combined-account scope and no rollover. Receiving-period revisions control incoming carry, and current-month adjustment previews are computed by the same repository as final calculations.
 
-BackupSnapshot/BackupArchive/PlanningBackupValidation support version 4 with version 1–3 defaults and validate hierarchy, allocation sums, ownership, checkpoint sources, transfer pairs and budget relationships before replacement. Planning records are included; delivery markers are rebuilt and push notifications are disabled after restore. Database migrations are registered in EncryptedLedger, including recovery staging.
+BackupSnapshot/BackupArchive/PlanningBackupValidation support version 5 with reconstructed version-4 selections and version 1–3 planning defaults and validate hierarchy, allocation sums, ownership, checkpoint sources, transfer pairs and budget relationships before replacement. Planning records are included; delivery markers are rebuilt and push notifications are disabled after restore. Database migrations are registered in EncryptedLedger, including recovery staging.
 
 MainActivity now calculates window protection during composition so completion of screenshot initialization actually re-applies FLAG_SECURE. The real-window test passes in the final full suite after this fix. RedesignUiTest uses a valid multi-category synthetic fixture. PlanningMathTest and PlanningIntegrationTest cover arithmetic and new repository invariants; PlanningUiTest and PlanningMigrationTest extend UI and encrypted upgrade checks. Executed evidence is recorded in VALIDATION.md. At font scaling above 150%, bottom tabs retain named icons for accessibility and omit crowded visible labels; the app bar identifies the current screen.
 
@@ -358,3 +361,25 @@ Final 2 October verification: 59 JVM passes/1 optional skip; Android runner 88 r
 The settings lookup quotes the existing `key` column and uses `:settingKey`; no schema or data changes are needed. TrackerViewModel and AnalyticsViewModel require the framework-provided SavedStateHandle; manual UI test fixtures supply their own explicitly. The obsolete CategoriesScreen and unused legacy analytics state/imports were removed; ClassificationScreens remains the active category editor. Hilt context qualifiers use explicit @param targets. Coroutine waits use Duration values and Android test schema assets use the Gradle directories API.
 
 The manifest retains opt-in RECEIVE_SMS for core incoming tracking. Only its SmsAndCallLogPolicy inspection is suppressed, with a comment limiting the exception to this personal sideloaded APK and requiring reassessment before Play Store distribution. The redundant activity label is removed; it inherits the unchanged application label. Build/tests and remaining lint findings are recorded in VALIDATION.md. No blanket warning suppression or financial behavior change was introduced.
+
+## Financial colors and carry-forward presentation — 3 October 2026
+
+[FinancialColors.kt](app/src/main/java/com/kiz9r/expense_tracker/ui/theme/FinancialColors.kt) defines shared dark/light palettes, amount-direction helpers and red category-chart shades. Theme.kt provides the palette independently of Material primary/button colors. Zero amounts remain neutral. Net spending reverses the cash-flow color convention: positive expense is red, while net refund/credit is green. Balances stay neutral. PlotSeries supports exact-value colors while its labelled series retains a stable color; category segment separators and accessible lists preserve interpretation without relying on hue.
+
+Components.Notice now takes NoticeSeverity.Information/Warning/Error/Success and supplies a distinct icon plus explicit foreground/container colors. Reconciliation exceptions, uncertain observations, provisional balances and budget thresholds use Warning; failed operations use Error. BudgetAmountSummary labels base, surplus/deficit carry, effective allocation, spending and remaining separately; overspending uses a yellow notice plus red amount. Entry forms, transaction/evidence-facing amounts, Home/Insights and allocation drilldowns share the same direction helpers.
+
+PlanningMath/Repository arithmetic and all existing budget configurations are unchanged. The two-way option explicitly explains deficits spanning subsequent months; Off remains the creation default, and current-month changes remain explicit. Regression coverage adds the December–February deficit/refund/revision chain and rendered text-color/contrast assertions in FinancialColorsUiTest. Final execution evidence and captures are recorded separately in VALIDATION.md; implementation is not a physical-phone or release-signing claim.
+
+3 October verification: 60 JVM passes/1 optional skip; full Android suite 91 reported/88 passes/3 optional skips; four focused UI checks passed after the final Notice parameter-order lint correction. Lint reports 0 errors/26 existing warnings. Dark/light and 200% font captures were inspected, with automated text/container and category-graphic contrast assertions. PlanningUiTest waits for the save snackbar to clear before clicking the budget detail action; the real navigation assertion is retained. Physical accessibility checks and the original signing-key blocker remain open.
+
+## Multi-category budgets and update recovery — 3 October 2026
+
+BudgetRevisionCategoryEntity in schema 4 stores explicit category roots for each effective-dated revision. MIGRATION_3_4 backfills selections from the legacy budgets.categoryId column, which is retained only for compatibility. BudgetSelection.kt normalizes selected roots, expands parent/child coverage once and checks overlap across effective revision boundaries and frozen periods. BudgetRepository create/revise/preview accept sets; amount-only edits preserve coverage, current category adjustments replace only the current coverage snapshot, and earlier periods remain intact.
+
+BudgetRepository.observe emits BudgetLoadState with loading, ready results or an error retaining the last successful reports. Exceptions are handled per calculation rather than outside the Flow, allowing subsequent invalidations or Retry to recover. The observed source tables include revision selections and ledger facts, but exclude derived coverage/period writes to avoid feedback loops. Home, Plan and details consume this shared state. BudgetCategoryPicker supplies searchable labelled checkboxes; inherited children cannot duplicate a selected parent. Scope labels and exact allocation drilldowns explain what contributes. Editor failures remain visible inside the dialog.
+
+BackupSnapshot/Archive/Service/PlanningBackupValidation export version 5, accept 1–5 and reconstruct version-4 selections. Selection references and overlap are validated before replacement. The restore transaction clears/replaces selections with the other financial records; category deletion guards include revision selections. EncryptedLedger registers all migrations through schema 4.
+
+New tests cover manual creation/edit/recreation/live changes, repository error/retry/recovery, multi-category splits and refunds, future overlap, preserved historical coverage, backup defaults and invalid replacement, encrypted schema-3 migration and the category picker in both themes/large fonts. Final build/unit/lint and full Android suite passed: 60 JVM passes/1 optional skip; 101 Android tests reported/98 passes/3 optional skips; lint 0 errors/26 existing warnings. See VALIDATION.md for dated evidence. The original phone-specific missing update was not conclusively reproduced in the initial baseline, which stopped before save completion; no existing user records were altered to simulate a fix.
+
+The picker additionally passed a separate run with Android system font_scale=2.0; dark/light system-scaled dialog captures were inspected and the emulator setting was restored to 1.0. The test host does not apply MainActivity system-bar styling. Physical TalkBack/small-device checks remain open.

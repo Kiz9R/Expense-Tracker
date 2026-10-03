@@ -35,7 +35,7 @@ class BackupService @Inject constructor(@param:ApplicationContext private val co
             checkpoints=db.planning().checkpoints(), allocations=db.planning().allocations(),
             transferPairs=db.planning().pairs(), budgetExclusions=db.planning().exclusions(),
             budgets=db.planning().budgets(), budgetRevisions=db.planning().revisions(),
-            budgetPeriods=db.planning().periods(), budgetCoverage=db.planning().coverage()
+            budgetPeriods=db.planning().periods(), budgetCoverage=db.planning().coverage(), budgetSelections=db.planning().selections()
         )
     }
     suspend fun export(uri: Uri, password: CharArray) = withContext(Dispatchers.IO) {
@@ -63,7 +63,7 @@ class BackupService @Inject constructor(@param:ApplicationContext private val co
             val dao = db.backup()
             db.ledger().clearJobs()
             val planning=db.planning()
-            planning.clearAlerts(); planning.clearCoverage(); planning.clearPeriods(); planning.clearRevisions(); planning.clearBudgets()
+            planning.clearSelections(); planning.clearAlerts(); planning.clearCoverage(); planning.clearPeriods(); planning.clearRevisions(); planning.clearBudgets()
             planning.clearExclusions(); planning.clearPairs(); planning.clearAllocations(); planning.clearCheckpoints()
             dao.clearSettingEntity()
             dao.clearRefundLinkEntity()
@@ -97,7 +97,7 @@ class BackupService @Inject constructor(@param:ApplicationContext private val co
             dao.insertSettingEntity(snapshot.settings)
             planning.checkpoints(snapshot.checkpoints); planning.allocations(snapshot.allocations); planning.pairs(snapshot.transferPairs)
             planning.exclusions(snapshot.budgetExclusions); planning.budgets(snapshot.budgets); planning.revisions(snapshot.budgetRevisions)
-            planning.periods(snapshot.budgetPeriods); planning.coverage(snapshot.budgetCoverage)
+            planning.selections(snapshot.budgetSelections); planning.periods(snapshot.budgetPeriods); planning.coverage(snapshot.budgetCoverage)
             com.kiz9r.expense_tracker.planning.BalanceRepository(db).backfill()
             db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("budget_notifications","false"))
             db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("budget_alert_baseline","false"))

@@ -14,7 +14,7 @@ object BackupArchive {
             val root=JsonParser.parseString(plain.toString(Charsets.UTF_8)).asJsonObject
             require(root.get("version")?.isJsonPrimitive==true && root.getAsJsonPrimitive("version").isNumber)
             require(root.get("createdAt")?.isJsonPrimitive==true && root.getAsJsonPrimitive("createdAt").isNumber)
-            require(root.get("version")?.asBigDecimal?.intValueExact() in 1..4)
+            require(root.get("version")?.asBigDecimal?.intValueExact() in 1..5)
             require(root.get("createdAt")?.asBigDecimal?.longValueExact()?.let { it>0 }==true)
             // Gson can otherwise silently default absent primitives or null collections.
             val required=mapOf(
@@ -65,6 +65,19 @@ object BackupArchive {
                     add("parentId",com.google.gson.JsonNull.INSTANCE);addProperty("icon","label");addProperty("archived",false)
                 }}
             } else validatePlanningJson(root)
+            if(version<5) {
+                val selections=com.google.gson.JsonArray()
+                val categories=root.getAsJsonArray("budgets").associate { it.asJsonObject["id"].asString to it.asJsonObject["categoryId"].asString }
+                root.getAsJsonArray("budgetRevisions").forEach { row ->
+                    val revision=row.asJsonObject
+                    selections.add(com.google.gson.JsonObject().apply {
+                        addProperty("revisionId",revision["id"].asString)
+                        addProperty("categoryId",requireNotNull(categories[revision["budgetId"].asString]))
+                    })
+                }
+                root.add("budgetSelections",selections)
+            }
+            validateSelectionJson(root)
             return gson.fromJson(root,BackupSnapshot::class.java).also(::validateBackup)
         } catch(e: Exception) {
             throw IllegalArgumentException("Backup contents are incomplete, unsupported or inconsistent. Existing data was not changed.",e)

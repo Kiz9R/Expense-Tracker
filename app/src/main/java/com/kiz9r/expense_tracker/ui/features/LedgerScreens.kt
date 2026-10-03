@@ -1,4 +1,5 @@
 package com.kiz9r.expense_tracker.ui.features
+import com.kiz9r.expense_tracker.ui.theme.financialColors
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -138,7 +139,7 @@ import kotlinx.coroutines.flow.catch
             TextButton(onClick={update(HistoryFilter());start="";end="";minimum="";maximum="";expanded=false}){Text("Reset filters")}
           }
         }
-        if(loaded.error!=null) Notice(loaded.error,true)
+        if(loaded.error!=null) Notice(loaded.error,severity=NoticeSeverity.Error)
         else if(loaded.rows==null) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("transactions.loading"))
         else if(transactions.isEmpty()) Notice("No transactions match this view. Clear filters, add a transaction or import an SBI statement.")
         LazyColumn(state=scroll,modifier=Modifier.weight(1f),contentPadding=PaddingValues(bottom=88.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -190,7 +191,8 @@ import kotlinx.coroutines.flow.catch
     }
     Screen("transactions.form") {
         Heading(if(id==null) "Add transaction" else "Edit manual transaction")
-        Field(amount,{amount=it},"Amount (INR)","transactions.form.amount",numeric=true)
+        Field(amount,{amount=it},"Amount (INR)","transactions.form.amount",numeric=true,
+            textColor=financialColors.movement(runCatching{Money.parse(amount)}.getOrDefault(1L),Direction.valueOf(direction)))
         Choice("Direction",direction,listOf("DEBIT" to "Expense","CREDIT" to "Income"),"transactions.form.direction"){direction=it}
         Choice("Account",account,accounts.map {it.id to (it.nickname+" ••••"+it.last4)},"transactions.form.account"){account=it}
         DateControl(date,{date=it},"Date","transactions.form.date")

@@ -42,10 +42,16 @@ These changes require tested database migrations and an expanded, versioned encr
 - **Balances:** open Settings → Account balances, import a reconciled statement or add an opening balance. A manual opening is the balance before all movements on its date. Calculations include hidden transactions and transfers, exclude failed/future entries, and show source/date and provisional-data warnings. Conflicting checkpoints require selection. SMS-reported balances are displayed separately. None is a guarantee of live bank availability. Historical charts cover up to twelve months with exact accessible values.
 - **Categories:** keep existing assignments, add two-level groups and icons, and archive categories in use. Transaction details offer exact split allocations; category charts/history show allocated amounts separately from full transaction amounts.
 - **Transfers:** explicitly pair equal debit/credit movements in different owned accounts from transaction details. Both movements remain; fees stay separate. Unpairing retains transfer classification until changed.
-- **Budgets:** open Plan → Create monthly budget. Default scope is all accounts and rollover is OFF. Choose surplus-only, an optional positive carry cap, or surplus/deficit carry. Budgets include existing current-month spending with no proration. Account-specific budgets are available; overlapping category/account coverage is rejected.
+- **Budgets:** open Plan → Create monthly budget. Choose one or more categories sharing a single allocation. Parent categories include their children once. Default scope is all accounts and rollover is OFF. Choose **Carry unused money only** or **Carry unused money and deduct overspending**, with an optional positive carry cap. Budgets include existing current-month spending with no proration. Account-specific budgets are available; overlapping category/account coverage is rejected.
 - Each receiving month’s rollover rule determines incoming carry. Changes default to next month; current-month adjustments show a preview. Late transactions/refunds recalculate subsequent carry without changing historical base allocations. A budget exclusion changes neither bank balance nor ordinary analytics.
 - Budget push alerts are opt-in, use private notification content and establish an initial baseline. In-app thresholds remain available without notification permission; Android may delay background notifications.
 - Account nickname/type editing and archive/reactivate preserve history. Accounts with new planning records cannot currently be permanently deleted; archive them instead. This guard follows automatic approval review rejecting irreversible cleanup of those records.
+
+With two-way carry-forward, a ₹5,000 budget with ₹12,000 spent leaves a ₹7,000 deficit. With no further spending, the next month has −₹2,000 available and the month after has ₹3,000. Deficits continue until covered; positive carry caps do not limit them. Budget details show each part of this calculation separately.
+
+Budget cards show covered categories, account scope and month. Eligible transactions update spent/remaining automatically. Calculation failures show stale results and a Retry action; later ledger changes also retry. Category adjustments normally begin next month; applying them to the current month previews spending and remaining first.
+
+Financial colors are consistent in dark and light mode: **red for spending**, **green for credits including refunds**, and **yellow for warnings/review**. Zero values and account balances stay neutral. An overspent budget has a yellow warning and a red amount. Signs and labels remain visible alongside color.
 
 Planned payments, due-date reminders, forecasts and projected-shortfall alerts are not included in v1.5.0. See the validation tracker before treating the build as release-ready.
 
@@ -99,7 +105,7 @@ Select this month, last month, the last 3/6/12 calendar months, or custom dates 
 
 History loads bounded windows as you scroll. Use its filter sheet for advanced criteria; chart drilldowns have independent filters. Entry forms use native date/time pickers and expandable notes/tags.
 
-Version 1.5 exports backup version 4, including checkpoints, allocations, transfer links and budgets. It restores versions 1–4; older archives retain their records and receive flat categories, empty planning data and dark theme if absent. Eligible statement checkpoints are reconstructed. Older APKs reject version-4 archives.
+Version 1.5 exports backup version 5, including checkpoints, allocations, transfer links, budgets and revision-category selections. It restores versions 1–5. Version-4 budgets regain their original single-category selections; versions 1–3 receive flat categories and empty planning data. Missing themes default to dark and eligible statement checkpoints are reconstructed. Older APKs reject version-5 archives.
 
 ## SMS tracking
 
@@ -148,7 +154,7 @@ SMS and notification formats differ across providers/releases. Included parsers 
 
 ## Backup and recovery
 
-Version-4 .etbackup snapshots (with version 1–4 restore compatibility) use AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations), with fresh salt/nonce and a minimum 12-character password. They are portable across installations and independent of Keystore keys. Planning records are included; notification delivery markers are rebuilt and budget push notifications must be re-enabled after restore.
+Version-5 .etbackup snapshots (with version 1–5 restore compatibility) use AES-256-GCM and PBKDF2-HMAC-SHA256 (600,000 iterations), with fresh salt/nonce and a minimum 12-character password. They are portable across installations and independent of Keystore keys. Planning records are included; notification delivery markers are rebuilt and budget push notifications must be re-enabled after restore.
 
 To create a backup, open **Settings → Encrypted backup & restore**, enter and confirm a password of at least 12 characters, and save the .etbackup file outside the app's private storage. Keep its password separately. Validate the saved file before relying on it for recovery.
 
@@ -167,3 +173,5 @@ One Gradle module with domain, data, ingestion, reconciliation, security, backup
 Compose -> ViewModel/use case -> repository -> encrypted Room. Background services reuse the same repositories and matching engine. Screens never access a DAO. The exported version-3 schema and historical versions 1–2 are in app/schemas. Explicit migrations 1→2→3 preserve records; encrypted upgrade tests cover both older versions.
 
 Tests cover deterministic parsers/matching, 120-row synthetic statements, duplicates/overlaps, concurrent ingestion, account suffix collisions, metadata preservation, failures/mandates, refunds, backup integrity/replacement, PDF passwords and a real Compose transaction flow with encrypted persistence. The root [synthetic-statement.txt](synthetic-statement.txt) is a fictional extracted-text fixture, not a real bank record or an importable PDF. Previously executed results remain in [VALIDATION.md](VALIDATION.md); [leftout.md](leftout.md) tracks current feature status, all requirement areas, the 12 acceptance scenarios and remaining checks.
+
+Multi-category budgets use **Room schema 4** and **backup version 5**. Versions 1–5 can be restored; version-4 budgets regain their original single-category selections. Older apps reject version-5 archives. Existing records and historical budget coverage are preserved by migration. The v1.5.0 signing-key blocker remains unchanged.

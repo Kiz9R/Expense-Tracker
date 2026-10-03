@@ -1,4 +1,5 @@
 package com.kiz9r.expense_tracker.ui.features
+import com.kiz9r.expense_tracker.ui.theme.financialColors
 
 import android.Manifest
 import android.app.KeyguardManager
@@ -73,7 +74,7 @@ import com.kiz9r.expense_tracker.domain.*
             enabled("sms") && !smsGranted -> "SMS tracking paused: Android permission is missing."
             enabled("sms") -> "SMS tracking enabled for new incoming messages."
             else -> "SMS tracking is off."
-        },modifier=Modifier.testTag("settings.sms.status"))
+        },modifier=Modifier.testTag("settings.sms.status"),color=if(enabled("sms") && !smsGranted) financialColors.warning else financialColors.neutral)
         Text("Stored financial SMS: "+stats.received+" · Pending: "+stats.pending+" · Needs review: "+stats.review)
         settings.firstOrNull { it.key=="sms_last_received" }?.value?.toLongOrNull()?.let {
             Text("Last eligible SMS received: "+java.time.Instant.ofEpochMilli(it).atZone(Dates.zone).toLocalDateTime())
@@ -94,7 +95,7 @@ import com.kiz9r.expense_tracker.domain.*
             else vm.setting("app_lock",it)
         }
         Toggle("Allow screenshots on financial screens",enabled("screenshots"),"settings.screenshots"){vm.setting("screenshots",it)}
-        Notice("Uninstalling removes this device's ledger. Export an encrypted backup first and keep its password somewhere safe.")
+        Notice("Uninstalling removes this device's ledger. Export an encrypted backup first and keep its password somewhere safe.",severity=NoticeSeverity.Warning)
         Text("No cloud sync, ads, bank login, payment initiation, or financial-data network access.",style=MaterialTheme.typography.bodySmall)
     }
 }

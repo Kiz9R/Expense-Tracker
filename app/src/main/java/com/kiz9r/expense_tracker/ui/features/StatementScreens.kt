@@ -1,5 +1,6 @@
 package com.kiz9r.expense_tracker.ui.features
 
+import com.kiz9r.expense_tracker.ui.theme.financialColors
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,20 +21,21 @@ import com.kiz9r.expense_tracker.reconciliation.*
         Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
             Text(if(preview) "After these review choices" else "Reconciliation summary",style=MaterialTheme.typography.titleMedium)
             Text("Rows: "+summary.rows+" · Matched: "+summary.matched+" · New: "+summary.added)
-            Text("Needs review: "+summary.needsReview+" · Ignored: "+summary.ignored)
+            Text("Needs review: "+summary.needsReview+" · Ignored: "+summary.ignored,
+                color=if(summary.needsReview>0 || summary.ignored>0) financialColors.warning else financialColors.neutral)
             Text("Refund / reversal rows: "+summary.refundsAndReversals)
-            Text("Statement debits: "+Money.format(summary.statementDebit))
-            Text("Statement credits: "+Money.format(summary.statementCredit))
-            Text((if(preview) "Planned linked debits: " else "Linked ledger debits: ")+Money.format(summary.linkedDebit))
-            Text((if(preview) "Planned linked credits: " else "Linked ledger credits: ")+Money.format(summary.linkedCredit))
+            Text("Statement debits: "+Money.format(summary.statementDebit),color=financialColors.netSpending(summary.statementDebit),modifier=Modifier.testTag("statements.summary.statementDebit"))
+            Text("Statement credits: "+Money.format(summary.statementCredit),color=financialColors.cashFlow(summary.statementCredit),modifier=Modifier.testTag("statements.summary.statementCredit"))
+            Text((if(preview) "Planned linked debits: " else "Linked ledger debits: ")+Money.format(summary.linkedDebit),color=financialColors.netSpending(summary.linkedDebit),modifier=Modifier.testTag("statements.summary.linkedDebit"))
+            Text((if(preview) "Planned linked credits: " else "Linked ledger credits: ")+Money.format(summary.linkedCredit),color=financialColors.cashFlow(summary.linkedCredit),modifier=Modifier.testTag("statements.summary.linkedCredit"))
             Text("Opening: "+Money.format(summary.opening))
             Text("Calculated closing: "+Money.format(summary.calculatedClosing))
             Text("Statement closing: "+Money.format(summary.closing))
             Text("Official totals include hidden items and owned transfers.",style=MaterialTheme.typography.bodySmall)
         }
     }
-    summary.warnings.forEach { Notice(it,true) }
-    if(summary.ignored>0) Notice("Ignored rows remain official evidence and keep this statement in Exceptions.")
+    summary.warnings.forEach { Notice(it,severity=NoticeSeverity.Warning) }
+    if(summary.ignored>0) Notice("Ignored rows remain official evidence and keep this statement in Exceptions.",severity=NoticeSeverity.Warning)
 }
 
 private fun candidateLabel(candidate: MatchCandidate): String {
@@ -92,17 +94,17 @@ private fun candidateLabel(candidate: MatchCandidate): String {
                 ReconciliationSummary(summary,true)
                 val assigned=data.rows.mapNotNull { effectiveResolution(it,resolutions)?.takeIf {it.action=="match"}?.transactionId }
                 val duplicateTargets=assigned.distinct().size!=assigned.size
-                if(duplicateTargets) Notice("Two rows use the same transaction. Choose a different match or create a separate transaction.",true)
+                if(duplicateTargets) Notice("Two rows use the same transaction. Choose a different match or create a separate transaction.",severity=NoticeSeverity.Warning)
                 data.rows.drop(page*20).take(20).forEach { rowPreview ->
                     val row=rowPreview.row
                     val choice=effectiveResolution(rowPreview,resolutions)
                     OutlinedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                            Text("Row "+(row.sequence+1)+" · "+row.date+" · "+Money.format(row.amountMinor)+" "+row.direction)
+                            Text("Row "+(row.sequence+1)+" · "+row.date+" · "+Money.format(row.amountMinor)+" "+row.direction,color=financialColors.movement(row.amountMinor,row.direction))
                             Text(row.narration)
                             Text("Ref: "+row.reference.ifBlank {"not available"}+" · Balance: "+Money.format(row.balance))
                             row.valueDate?.let {Text("Value date: "+it)}
-                            if(rowPreview.decision is MatchDecision.Review) Notice(rowPreview.decision.reason,true)
+                            if(rowPreview.decision is MatchDecision.Review) Notice(rowPreview.decision.reason,severity=NoticeSeverity.Warning)
                             val candidates=rowPreview.candidates.associateBy {it.id}
                             val ids=candidates.keys.toMutableSet()
                             (rowPreview.decision as? MatchDecision.Exact)?.let {ids+=it.transactionId}
@@ -133,7 +135,7 @@ private fun candidateLabel(candidate: MatchCandidate): String {
         }
         if(preview==null && !importing) jobs.forEach {job ->
             Text(job.fileName+" · "+job.status.lowercase())
-            job.error?.let {Notice(it,true)}
+            job.error?.let {Notice(it,severity=NoticeSeverity.Error)}
             Row {
                 if(job.status!="FAILED") TextButton(onClick={vm.resumeImport(job.id)},enabled=!busy,modifier=Modifier.testTag("statements.jobs.resume."+job.id)){Text("Resume")}
                 TextButton(onClick={vm.action {vm.statementJobs.discard(job.id)}},enabled=!busy){Text("Discard")}
@@ -146,7 +148,8 @@ private fun candidateLabel(candidate: MatchCandidate): String {
                 Column(Modifier.padding(16.dp)) {
                     Text(imported.fileName)
                     Text(imported.startDate+" – "+imported.endDate)
-                    Text(imported.transactionCount.toString()+" transactions · "+imported.status.lowercase())
+                    Text(imported.transactionCount.toString()+" transactions · "+imported.status.lowercase(),
+                        color=if(imported.status=="EXCEPTIONS") financialColors.warning else financialColors.neutral)
                     Text("Imported "+Dates.date(imported.importedAt))
                 }
             }
@@ -172,19 +175,19 @@ private fun candidateLabel(candidate: MatchCandidate): String {
     }
     Screen("statements.detail") {
         Heading("Statement evidence",report?.imported?.fileName)
-        error?.let {Notice(it,true)}
+        error?.let {Notice(it,severity=NoticeSeverity.Error)}
         report?.let { data ->
             Text(data.imported.startDate+" – "+data.imported.endDate+" · "+data.imported.status.lowercase())
             Text("Imported "+Dates.date(data.imported.importedAt)+" · Parser "+data.imported.parserVersion)
             ReconciliationSummary(data.summary,false)
             if(data.summary.warnings.isNotEmpty())
-                Notice("Balance discrepancies cannot be dismissed. Check the original PDF or obtain a corrected statement; official rows stay unchanged.")
+                Notice("Balance discrepancies cannot be dismissed. Check the original PDF or obtain a corrected statement; official rows stay unchanged.",severity=NoticeSeverity.Warning)
             rows.drop(page*30).take(30).forEach {row ->
-                Text("Row "+(row.sequence+1)+" · "+row.date+" · "+Money.format(row.amountMinor)+" "+row.direction)
+                Text("Row "+(row.sequence+1)+" · "+row.date+" · "+Money.format(row.amountMinor)+" "+row.direction,color=financialColors.movement(row.amountMinor,row.direction))
                 Text(row.narration)
                 Text("Ref "+row.reference.ifBlank {"not available"}+" · Balance "+Money.format(row.balance))
                 if(row.ignored) {
-                    Notice("Ignored during review; retained as an exception.")
+                    Notice("Ignored during review; retained as an exception.",severity=NoticeSeverity.Warning)
                     TextButton(onClick={vm.action {
                         candidates=vm.reconciliation.ignoredRowCandidates(row.id);reviewRow=row.id;target=""
                     }},enabled=!busy,modifier=Modifier.testTag("statements.detail.resolve."+row.sequence)){Text("Resolve ignored row")}
@@ -254,10 +257,10 @@ private fun candidateLabel(candidate: MatchCandidate): String {
                         Text("Account "+(it.accountLast4?.let { suffix -> "••••"+suffix } ?: "not identified")+
                             " · "+it.kind.name.replace('_',' '))
                         Text("Transaction date "+it.date+" · Reference "+it.reference.ifBlank {"not available"})
-                        it.amountMinor?.let { amount -> Text("Parsed amount "+Money.format(amount)) }
+                        it.amountMinor?.let { amount -> Text("Parsed amount "+Money.format(amount),color=it.direction?.let{direction->financialColors.movement(amount,direction)} ?: financialColors.neutral) }
                         it.balanceMinor?.let { balance -> Text("Reported balance "+Money.format(balance)) }
                     }
-                    Text(event.reviewReason.orEmpty(),color=MaterialTheme.colorScheme.error)
+                    Notice(event.reviewReason.orEmpty(),severity=NoticeSeverity.Warning)
                 }
             }
             if(eventId==event.id) {
@@ -265,7 +268,7 @@ private fun candidateLabel(candidate: MatchCandidate): String {
                 if(!uncertain) Choice("Account",account,listOf("" to "Choose account")+eligible.map {it.id to (it.nickname+" ••••"+it.last4)},
                     "review.account"){if(!busy){account=it;target=""}}
                 if(uncertain) {
-                    Notice("This message cannot safely create a transaction. Add a manual entry if appropriate, then ignore the message.")
+                    Notice("This message cannot safely create a transaction. Add a manual entry if appropriate, then ignore the message.",severity=NoticeSeverity.Warning)
                     OutlinedButton(onClick=addManual,enabled=!busy,modifier=Modifier.testTag("review.manual")){Text("Add manual entry")}
                 }
                 val options=listOf("" to "Choose resolution","ignore" to "Ignore observation")+
