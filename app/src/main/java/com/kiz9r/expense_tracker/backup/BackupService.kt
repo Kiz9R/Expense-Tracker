@@ -35,7 +35,8 @@ class BackupService @Inject constructor(@param:ApplicationContext private val co
             checkpoints=db.planning().checkpoints(), allocations=db.planning().allocations(),
             transferPairs=db.planning().pairs(), budgetExclusions=db.planning().exclusions(),
             budgets=db.planning().budgets(), budgetRevisions=db.planning().revisions(),
-            budgetPeriods=db.planning().periods(), budgetCoverage=db.planning().coverage(), budgetSelections=db.planning().selections()
+            budgetPeriods=db.planning().periods(), budgetCoverage=db.planning().coverage(), budgetSelections=db.planning().selections(),
+            reserveAccounts=db.reserves().accounts(),reserveFunding=db.reserves().fundings(),reserveActivity=db.reserves().activity()
         )
     }
     suspend fun export(uri: Uri, password: CharArray) = withContext(Dispatchers.IO) {
@@ -63,6 +64,7 @@ class BackupService @Inject constructor(@param:ApplicationContext private val co
             val dao = db.backup()
             db.ledger().clearJobs()
             val planning=db.planning()
+            db.reserves().clearFunding(); db.reserves().clearActivity(); db.reserves().clearAccounts()
             planning.clearSelections(); planning.clearAlerts(); planning.clearCoverage(); planning.clearPeriods(); planning.clearRevisions(); planning.clearBudgets()
             planning.clearExclusions(); planning.clearPairs(); planning.clearAllocations(); planning.clearCheckpoints()
             dao.clearSettingEntity()
@@ -98,6 +100,7 @@ class BackupService @Inject constructor(@param:ApplicationContext private val co
             planning.checkpoints(snapshot.checkpoints); planning.allocations(snapshot.allocations); planning.pairs(snapshot.transferPairs)
             planning.exclusions(snapshot.budgetExclusions); planning.budgets(snapshot.budgets); planning.revisions(snapshot.budgetRevisions)
             planning.selections(snapshot.budgetSelections); planning.periods(snapshot.budgetPeriods); planning.coverage(snapshot.budgetCoverage)
+            db.reserves().accounts(snapshot.reserveAccounts); db.reserves().fundings(snapshot.reserveFunding); db.reserves().activity(snapshot.reserveActivity)
             com.kiz9r.expense_tracker.planning.BalanceRepository(db).backfill()
             db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("budget_notifications","false"))
             db.ledger().saveSetting(com.kiz9r.expense_tracker.data.SettingEntity("budget_alert_baseline","false"))

@@ -46,6 +46,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
     suspend fun deleteAccount(accountId: String) = db.withTransaction {
         require(dao.allAccounts().any { it.id == accountId }) { "Account no longer exists." }
         // Remove ownership-dependent records before their lookup paths disappear.
+        require(!db.reserves().hasHistory(accountId)) { "This account has set-aside history. Archive it to preserve that history." }
         require(!db.planning().hasAccountPlanningHistory(accountId)) { "This account has planning history. Archive it to preserve balances, budgets and allocations." }
         dao.deleteAccountDecisions(accountId)
         dao.deleteAccountEvents(accountId)
@@ -87,6 +88,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
             direction = input.direction,date = date.toString(),timestamp = timestamp,merchantOriginal = input.merchant.trim(),
             kind = if (input.direction == Direction.DEBIT) EventKind.DEBIT else EventKind.CREDIT, manuallyCreated = true,
             createdAt = old?.createdAt ?: System.currentTimeMillis())
+        com.kiz9r.expense_tracker.planning.validateReserveChange(db,old,tx)
         dao.saveTransaction(tx)
         if (old == null) {
             val obs = Observation(Source.MANUAL,"manual:"+tx.id,System.currentTimeMillis(),timestamp,tx.date,
@@ -121,6 +123,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
         dao.saveMetadata((dao.metadata(id) ?: MetadataEntity(id)).copy(hidden=hidden))
     }
     suspend fun delete(id: String) = db.withTransaction {
+        require(db.reserves().funding(id)==null) { "Remove set-aside funding before deleting this entry." }
         require(db.planning().pair(id)==null && db.planning().allocations(id).isEmpty() && db.planning().excluded(id)==0) { "Remove planning links before deleting this manual entry, or hide it." }
         require(dao.refundConnections(id)==0) { "This entry is linked to a refund. Hide it instead." }
         require(dao.deleteManual(id) == 1) { "Only unverified manual entries can be deleted." }
@@ -128,6 +131,7 @@ class LedgerRepository @Inject constructor(val db: LedgerDatabase, private val g
     suspend fun ownedTransfer(id: String, enabled: Boolean) = db.withTransaction {
         val tx = requireNotNull(dao.transaction(id))
         require(enabled || db.planning().pair(id)==null) { "Unpair this transfer first." }
+        com.kiz9r.expense_tracker.planning.validateReserveChange(db,tx,tx.copy(ownedTransfer=enabled))
         dao.saveTransaction(tx.copy(ownedTransfer=enabled))
     }
     suspend fun category(id: String?, name: String) = db.withTransaction {

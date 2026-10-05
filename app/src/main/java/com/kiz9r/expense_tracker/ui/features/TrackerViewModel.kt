@@ -41,10 +41,12 @@ class TrackerViewModel @Inject constructor(
     private var accountObserver: Job? = null
     val categories = ledger.categories.stateIn(viewModelScope,sharing,emptyList())
     val balances = com.kiz9r.expense_tracker.planning.BalanceRepository(ledger.db)
+    val reserves = com.kiz9r.expense_tracker.planning.ReserveRepository(ledger.db)
     val budgets = com.kiz9r.expense_tracker.planning.BudgetRepository(ledger.db)
     val classification = com.kiz9r.expense_tracker.planning.ClassificationRepository(ledger.db)
     val budgetMonth=MutableStateFlow(savedState.get<String>("budget_month")?.let(YearMonth::parse) ?: YearMonth.from(Dates.today()))
     private val reportingDay=flow {while(true){emit(Dates.today());delay(1.minutes)}}.distinctUntilChanged()
+    val reserveState=reportingDay.flatMapLatest{reserves.observe(it)}.stateIn(viewModelScope,sharing,com.kiz9r.expense_tracker.planning.ReserveState())
     val balanceReports=reportingDay.flatMapLatest{balances.observe(it)}.catch {message.value=it.message}.stateIn(viewModelScope,sharing,emptyList())
     val budgetState=combine(budgetMonth,reportingDay){month,day->month to day}.flatMapLatest{budgets.observe(it.first)}.stateIn(viewModelScope,sharing,com.kiz9r.expense_tracker.planning.BudgetLoadState(budgetMonth.value,loading=true))
     fun planningState(id: String)=ledger.db.invalidationTracker.createFlow("allocations","budget_exclusions","transfer_pairs").map {

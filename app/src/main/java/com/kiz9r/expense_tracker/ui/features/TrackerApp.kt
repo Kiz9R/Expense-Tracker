@@ -79,7 +79,8 @@ import androidx.navigation.compose.*
                 composable("add") { TransactionForm(vm,null) {nav.navigate("detail/$it"){popUpTo("add"){inclusive=true}}} }
                 composable("edit/{id}") { TransactionForm(vm,it.arguments?.getString("id")) {nav.popBackStack()} }
                 composable("detail/{id}") { DetailScreen(vm,requireNotNull(it.arguments?.getString("id")),{id->nav.navigate("edit/$id")},{nav.popBackStack()}) }
-                composable("plan") { BudgetsScreen(vm) {nav.navigate("budget/$it")} }
+                composable("plan") { PlanScreen(vm,{nav.navigate("budget/$it")},{nav.navigate("detail/$it")}) }
+                composable("reserves/{account}") { ReserveScreen(vm,it.arguments?.getString("account").orEmpty()){id->nav.navigate("detail/$id")} }
                 composable("budget/{id}") { BudgetDetailScreen(vm,requireNotNull(it.arguments?.getString("id"))) {nav.navigate("detail/$it")} }
                 composable("balances") { BalancesScreen(vm,::navigate) }
                 composable("statements") { StatementsScreen(vm) {nav.navigate("statement/$it")} }

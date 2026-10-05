@@ -8,7 +8,7 @@ fun validateBackup(s: BackupSnapshot) {
     catch(e: Exception) { throw IllegalArgumentException("Backup records are inconsistent or unsupported. Existing data was not changed.",e) }
 }
 private fun validateContents(s: BackupSnapshot) {
-    require(s.version in 1..5) { "Unsupported backup version." }
+    require(s.version in 1..6) { "Unsupported backup version." }
     fun unique(values: List<String>) { require(values.none { it.isBlank() } && values.distinct().size==values.size) { "Duplicate or missing record identities." } }
     unique(s.accounts.map { it.id }); unique(s.categories.map { it.id }); unique(s.categories.map { it.name })
     unique(s.transactions.map { it.id }); unique(s.metadata.map { it.transactionId })
@@ -76,5 +76,6 @@ private fun validateContents(s: BackupSnapshot) {
     }
     validateBackupRelations(s)
     validatePlanningBackup(s)
+    validateReserveBackup(s)
     require(s.events.none { Regex("(?i)\\bOTP\\b|one.time.password|verification code").containsMatchIn(it.content) })
 }

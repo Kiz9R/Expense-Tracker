@@ -26,6 +26,7 @@ Last audited: 3 October 2026. This document describes existing code; it does not
 - [IDE inspection cleanup](#ide-inspection-cleanup--2-october-2026)
 - [Financial colors and carry-forward presentation](#financial-colors-and-carry-forward-presentation--3-october-2026)
 - [Multi-category budgets and update recovery](#multi-category-budgets-and-update-recovery--3-october-2026)
+- [Set-aside money](#set-aside-money--5-october-2026)
 
 ## Architecture and execution flow
 
@@ -56,7 +57,7 @@ Configuration lives in [app/build.gradle.kts](app/build.gradle.kts), [root build
 
 Android Storage Access Framework supplies scoped document selection/export. Coroutines move extraction and ingestion off the UI thread. No banking service or remote API is used.
 
-Room schema export is configured through KSP. Current schema 4 adds revision-category selections via MIGRATION_3_4, following schema 3’s planning tables, allocation view and category hierarchy via MIGRATION_2_3. Historical MIGRATION_1_2 adds statement warning JSON and durable review choices. Encrypted tests open both older schemas and verify retained data through the current schema. Every subsequent schema change requires another explicit tested migration. Destructive fallback is forbidden.
+Room schema export is configured through KSP. Current schema 5 adds account reserves, transaction funding and activity through MIGRATION_4_5. Schema 4 added revision-category selections via MIGRATION_3_4, following schema 3’s planning tables, allocation view and category hierarchy via MIGRATION_2_3. Historical MIGRATION_1_2 adds statement warning JSON and durable review choices. Encrypted tests open schemas 1–4 and verify retained data through the current schema. Every subsequent schema change requires another explicit tested migration. Destructive fallback is forbidden.
 
 Release optimization/R8 is enabled. [Keep rules](app/src/main/keepRules/rules.keep) preserve Gson DTOs and Room data records. The optional PDFBox JPEG2000 decoder is omitted because imports extract text without decoding images.
 
@@ -114,7 +115,7 @@ SHA-256 supplies stable identities/fingerprints, not source authenticity. Accoun
 
 ## Database schema and persistence
 
-[Exported schema 4](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/4.json) (with [schema 1](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/1.json) retained for migration tests) records exact fields, indices and foreign keys. Entities.kt and PlanningEntities.kt are the readable models. Schemas 1–3 remain migration fixtures.
+[Exported schema 5](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/5.json) (with [schema 1](app/schemas/com.kiz9r.expense_tracker.data.LedgerDatabase/1.json) retained for migration tests) records exact fields, indices and foreign keys. Entities.kt, PlanningEntities.kt and ReserveDao.kt are the readable models. Schemas 1–4 remain migration fixtures.
 
 | Table | Ownership, content and constraints |
 | --- | --- |
@@ -140,6 +141,9 @@ SHA-256 supplies stable identities/fingerprints, not source authenticity. Accoun
 | budgets / budget_revisions | Scope, start/end months and effective-dated base/rollover/cap revisions. |
 | budget_periods / budget_coverage | Monthly snapshots, historical category coverage and recomputable carry/spending amounts. |
 | budget_alerts | Per-budget/month/threshold delivery acknowledgement; rebuilt after restore. |
+| reserve_accounts | Current nonnegative earmarked amount, keyed by account; separate from bank balance. |
+| reserve_funding | One explicit funded amount per canonical transaction with account/transaction restrict references. |
+| reserve_activity | Immutable operation ID, global sequence, signed reserve delta, before/after funding, account, transaction/date snapshot, note and action timestamp. Indexed account/sequence pagination. |
 
 Transaction indices cover account, date, reference and verification; metadata indexes category. Events and import fingerprints have uniqueness constraints. Some conceptual relationships are checked by repository/backup validation rather than SQL foreign keys.
 
@@ -239,7 +243,7 @@ No application INTERNET, READ_SMS, broad storage, contacts, location, camera, mi
 
 ## Encrypted backup and restore
 
-BackupSnapshot version 5 (restoring versions 1–5) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links and settings. Transient import jobs and device/signing keys are excluded.
+BackupSnapshot version 6 (restoring versions 1–6) includes accounts, transactions, metadata, categories, tags/joins, evidence/events, merchant rules, imports/rows, decisions, mandates, refund links, planning records, reserve records and settings. Transient import jobs and device/signing keys are excluded. Older archives receive empty reserve collections.
 
 BackupCrypto format ETBACK01 uses magic/header bytes, PBKDF2-HMAC-SHA256 with 600,000 iterations, fresh 16-byte salt, fresh 12-byte nonce and AES-256-GCM. The complete header is authenticated as AAD. Exports require a password of at least 12 characters. The derived key is independent of Android Keystore, permitting portable recovery.
 
@@ -269,7 +273,7 @@ HistoryFilter/DAO support exact merchant, channel, category-key sets, weekday, f
 
 History uses a LazyColumn and a bounded 150-row SQL window, advancing by 50 rows near its end while stable transaction IDs preserve the overlapping scroll anchor. A control loads earlier windows. Search persists across tabs; filters move to a sheet. Date headers and icon/status text replace the old page layout. Forms put amount first, use native date/time selection and disclose optional notes/tags. Details separate amount/status, personal metadata, tracking actions and source evidence. Categories link to exact history. Statement screens retain their bounded review pages, persisted decisions and summaries with a staged import header.
 
-The existing settings table stores theme_mode. Room is now schema 4 for planning records and revision-category selections. Backups export version 5, accept versions 1–5, preserve explicit themes and default missing legacy themes to dark. Device-specific keys and permissions are not exported.
+The existing settings table stores theme_mode. Room is now schema 5 for planning records, revision-category selections and reserves. Backups export version 6, accept versions 1–6, preserve explicit themes and default missing legacy themes to dark. Device-specific keys and permissions are not exported.
 
 Verification is tracked in leftout.md and the dated VALIDATION.md entry. AnalyticsTest checks leap/comparison/preset/bucket boundaries and signed values. AnalyticsIntegrationTest checks exclusions, multiple evidence, exact drilldowns, theme/legacy replacement and 20,000 transactions over five years. RedesignUiTest checks navigation/search preservation and can capture synthetic dark/light/large-font screens with the v14_visual instrumentation argument. Physical-phone/TalkBack and Android 11 behavior still require separate evidence.
 
@@ -346,7 +350,7 @@ The planning package contains BalanceRepository (checkpoint-backed daily aggrega
 
 PlanningScreens, ClassificationScreens and BudgetNotificationSettings supply the native UI. Home retains the three spending figures and adds account/budget summaries; Plan replaces the Statements bottom tab. Statements remains a secondary route from Home/Settings. Account archives preserve history and pause automatic assignment. Split and budget drilldowns show contribution amounts separately from full transactions. New budget defaults are combined-account scope and no rollover. Receiving-period revisions control incoming carry, and current-month adjustment previews are computed by the same repository as final calculations.
 
-BackupSnapshot/BackupArchive/PlanningBackupValidation support version 5 with reconstructed version-4 selections and version 1–3 planning defaults and validate hierarchy, allocation sums, ownership, checkpoint sources, transfer pairs and budget relationships before replacement. Planning records are included; delivery markers are rebuilt and push notifications are disabled after restore. Database migrations are registered in EncryptedLedger, including recovery staging.
+BackupSnapshot/BackupArchive/PlanningBackupValidation now support version 6 with reconstructed version-4 selections, version 1–3 planning defaults and version 1–5 empty reserves. They validate hierarchy, allocation sums, ownership, checkpoint sources, transfer pairs and budget relationships before replacement; ReserveBackupValidation adds reserve activity replay and reference checks. Planning records are included; delivery markers are rebuilt and push notifications are disabled after restore. Database migrations are registered in EncryptedLedger, including recovery staging.
 
 MainActivity now calculates window protection during composition so completion of screenshot initialization actually re-applies FLAG_SECURE. The real-window test passes in the final full suite after this fix. RedesignUiTest uses a valid multi-category synthetic fixture. PlanningMathTest and PlanningIntegrationTest cover arithmetic and new repository invariants; PlanningUiTest and PlanningMigrationTest extend UI and encrypted upgrade checks. Executed evidence is recorded in VALIDATION.md. At font scaling above 150%, bottom tabs retain named icons for accessibility and omit crowded visible labels; the app bar identifies the current screen.
 
@@ -383,3 +387,23 @@ BackupSnapshot/Archive/Service/PlanningBackupValidation export version 5, accept
 New tests cover manual creation/edit/recreation/live changes, repository error/retry/recovery, multi-category splits and refunds, future overlap, preserved historical coverage, backup defaults and invalid replacement, encrypted schema-3 migration and the category picker in both themes/large fonts. Final build/unit/lint and full Android suite passed: 60 JVM passes/1 optional skip; 101 Android tests reported/98 passes/3 optional skips; lint 0 errors/26 existing warnings. See VALIDATION.md for dated evidence. The original phone-specific missing update was not conclusively reproduced in the initial baseline, which stopped before save completion; no existing user records were altered to simulate a fix.
 
 The picker additionally passed a separate run with Android system font_scale=2.0; dark/light system-scaled dialog captures were inspected and the emulator setting was restored to 1.0. The test host does not apply MainActivity system-bar styling. Physical TalkBack/small-device checks remain open.
+
+## Set-aside money — 5 October 2026
+
+Requirements §86 introduces one virtual reserve per account, independent of transactions, balances and budgets. [ReserveDao.kt](app/src/main/java/com/kiz9r/expense_tracker/data/ReserveDao.kt) defines reserve_accounts, reserve_funding and immutable reserve_activity, with indexed account/sequence pagination and MIGRATION_4_5. EncryptedLedger registers migrations through schema 5. Account and active-funding foreign keys restrict deletion; historical activity stores a transaction/date snapshot so an unassigned manual transaction can later be deleted without losing reserve history.
+
+[ReserveRepository.kt](app/src/main/java/com/kiz9r/expense_tracker/planning/ReserveRepository.kt) exposes current balance/reserve/unreserved reports, 30-row history pages, explicit add/release and desired-total funding operations. All modifications run in Room write transactions using checked Long arithmetic. Operation identities reject conflicting reuse and make successful retries idempotent; funding updates check the previously displayed amount to prevent stale overwrites. Activity records signed reserve deltas and previous/new funding. No reserve operation writes a canonical transaction, evidence, category allocation or budget exclusion. Existing spending eligibility remains authoritative.
+
+The reserve starts at zero and has no monthly reset. Ordinary ledger activity changes calculated/unreserved balance but never consumes reserves. Explicit funding consumes current reserve regardless of the expense's date. Removing funding returns its amount; hiding or refund linking does not. Adding beyond known balance or without a checkpoint requires acknowledgement; deficits in unreserved money remain visible, whereas reserves themselves cannot become negative. Refund replenishment is manual. Archived accounts retain access to reserves and history; permanent account deletion is guarded.
+
+LedgerRepository validates funding before financial edits, transfer classification or deletion. ClassificationRepository prevents pairing funded debits. ReconciliationRepository preserves compatible personal assignments and converts incompatible future-date exact matches into review; commit validates again and rolls back on conflict. Statement evidence and financial facts are never fabricated to resolve reserve inconsistencies.
+
+[ReserveScreens.kt](app/src/main/java/com/kiz9r/expense_tracker/ui/features/ReserveScreens.kt) supplies Plan's Budgets/Set aside selector, account chooser, warning-confirmed add/release dialogs, paginated activity, and transaction partial/full/change/remove funding. Home account cards link to account-specific reserve routes, preserving originating Back behavior. TrackerViewModel shares reserve report state independently of analytics dates; source changes and Retry recover from calculation errors while retaining labelled stale results. Account calculations remain repository-owned; UI does not read DAOs. Hierarchical tags use plan.set-aside, dashboard.reserves and transactions.detail.set-aside prefixes.
+
+BackupSnapshot/Archive/Service export version 6 and accept versions 1–6. ReserveBackupValidation strictly validates JSON primitives and replays ordered activity with checked arithmetic, then verifies cached amounts, assignments and existing financial references before any replacement. Versions 1–5 explicitly receive empty reserves. Restore clears/replaces all reserve tables within the existing transaction; keys, permissions and passwords retain existing protections.
+
+ReserveMathTest, ReserveIntegrationTest and ReserveUiTest cover arithmetic, isolation, concurrency/retries, accounting independence, refunds/hiding, edit guards, ingestion/duplicate statements, incompatible matching rollback, archives, reactive error recovery, navigation/recreation and visual layouts. Encrypted migrations now cover schemas 1–4. Executed results and remaining phone/signing limitations are recorded in VALIDATION.md and F073 in leftout.md.
+
+The reserve dialogs opt into explicit IME insets so their action buttons remain above the keyboard at 200% Android font scaling; the body remains scrollable. Normal and system-scaled dark/light screenshots are retained in build/set-aside-visuals. The full Android suite reported 111 tests (108 executed passes and three optional fixture skips); the keyboard layout refinement additionally passed the actual 200% font UI regression. Unit checks passed 62 tests with one optional skip; lint remains zero errors/26 existing warnings. These emulator checks do not establish physical TalkBack, OEM keyboard or release signing compatibility.
+
+The final normal-font UI regression also passed after the keyboard refinement (16.873s); final debug cold launch returned Status: ok (1786 ms). Only documentation changed afterward. Detailed logs and the original UI fixture failure remain in dated validation evidence.

@@ -7,12 +7,14 @@ import androidx.room.RoomDatabase
     StatementRowEntity::class, ReviewDecisionEntity::class, MandateEntity::class,
 RefundLinkEntity::class, SettingEntity::class, ImportJobEntity::class,
     BalanceCheckpointEntity::class, AllocationEntity::class, TransferPairEntity::class, BudgetExclusionEntity::class,
-    BudgetRevisionCategoryEntity::class, BudgetEntity::class, BudgetRevisionEntity::class, BudgetPeriodEntity::class, BudgetCoverageEntity::class, BudgetAlertEntity::class],
-    views=[EffectiveAllocation::class], version = 4, exportSchema = true)
+    BudgetRevisionCategoryEntity::class, BudgetEntity::class, BudgetRevisionEntity::class, BudgetPeriodEntity::class, BudgetCoverageEntity::class, BudgetAlertEntity::class,
+    ReserveAccountEntity::class, ReserveFundingEntity::class, ReserveActivityEntity::class],
+    views=[EffectiveAllocation::class], version = 5, exportSchema = true)
 abstract class LedgerDatabase : RoomDatabase() {
     abstract fun ledger(): LedgerDao
 abstract fun backup(): BackupDao
     abstract fun planning(): PlanningDao
+    abstract fun reserves(): ReserveDao
     abstract fun analytics(): com.kiz9r.expense_tracker.analytics.AnalyticsDao
 }
 /** Preserve financial records and unfinished parsing jobs from the first release. */

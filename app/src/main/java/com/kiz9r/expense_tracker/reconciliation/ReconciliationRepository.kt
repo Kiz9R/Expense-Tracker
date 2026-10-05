@@ -137,9 +137,12 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
             val previousRows = dao.matchingRows(row.fingerprint(accountId))
             val matching = previousRows.filter { !it.ignored && it.transactionId != null }
                 .mapNotNull { it.transactionId }.distinct().filter { it !in used }
-            val decision = if(matching.size == 1) MatchDecision.Exact(matching.single())
+            var decision = if(matching.size == 1) MatchDecision.Exact(matching.single())
                 else if(previousRows.any {it.ignored}) MatchDecision.Review(emptyList(),"This row was ignored in an earlier import. Review it explicitly.")
                 else matcher.match(event,accountId,options)
+            val exact=decision as? MatchDecision.Exact
+            if(exact!=null && db.reserves().funding(exact.transactionId)!=null && LocalDate.parse(row.date).isAfter(Dates.today()))
+                decision=MatchDecision.Review(emptyList(),"This match would invalidate set-aside funding. Remove its funding before matching, or review the statement row.")
             if (decision is MatchDecision.Exact) used += decision.transactionId
             RowPreview(row,decision,options.sortedWith(compareByDescending<MatchCandidate> { matcher.score(event,it) }.thenBy { it.id }))
         }
@@ -298,6 +301,7 @@ class ReconciliationRepository @Inject constructor(private val ledger: LedgerRep
                 kind=if(tx.kind==EventKind.FAILED && obs.kind!=EventKind.FAILED) obs.kind else tx.kind,
                 updatedAt=System.currentTimeMillis())
         }
+        com.kiz9r.expense_tracker.planning.validateReserveChange(db,existing,tx)
         dao.saveTransaction(tx)
         ledger.applyRules(tx)
         dao.saveEvidence(EvidenceEntity(transactionId=tx.id,eventId=raw.id,source=obs.source,method=method,verified=verified))
